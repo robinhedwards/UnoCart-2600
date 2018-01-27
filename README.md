@@ -1,7 +1,7 @@
 UnoCart-2600
 ============
 The UnoCart-2600 is an open source SD-card multicart for the Atari 2600. Use the joystick or the SELECT/RESET keys
-to navigate the SD cart and select a title to play.
+to navigate the SD card and select a title to play.
 
 SD card should be formatted as FAT or FAT32.
 
@@ -28,6 +28,7 @@ The UnoCart-2600 menu can be set to display in NTSC, PAL or PAL60 as follows:
 * By default, the firmware will be NTSC.
 * Connect PC0 -> GND for PAL60
 * Connect PC1 -> GND for PAL
+
 Note that this is for the menu only, and has no effect after you have selected a cartridge to play.
 
 ![Image](images/menuPAL.jpg?raw=true)
