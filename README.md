@@ -18,7 +18,7 @@ connected to a small PCB to breakout the Atari 2600 cartridge signals.
 An article describing how to build an UnoCart for the Atari 8-bit was published in
 [Excel Magazine](http://excel-retro-mag.co.uk) issue #4. You can also get a PDF of the article [here](https://github.com/robinhedwards/UnoCart/blob/master/UnoCart_EXCEL4.pdf).
 
-Building the cartridge for the 2600 is almost identical, with the same connections between D0-D7 and A0-A12.
+Building the cartridge for the 2600 is almost identical, with the same connections between D0-D7 and A0-A12, +5V and GND.
 All the other connections to the breakout PCB can be skipped, since these signals are not present on the 2600 cartridge slot.
 
 Obviously, you'll need a breakout board designed for the 2600 cartridge slot rather than the Atari 8-bit. The design files for the breakout PCB are hosted here and can be used to make your own copy of the PCB.
