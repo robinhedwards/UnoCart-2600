@@ -44,6 +44,10 @@ to test the design. The PCB design files are not currently public.
 ![Front of PCB when inserted in Atari](images/test_board_front_small.jpg?raw=true)
 ![Back of PCB when inserted in Atari](images/test_board_back_small.jpg?raw=true)
 
+Firmware
+--------
+The UnoCart-2600 firmware is open source under a GPL license and is hosted here.
+
 Credits
 -------
 * Design, hardware and firmware by Robin Edwards (electrotrains at atariage)
