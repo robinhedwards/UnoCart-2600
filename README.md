@@ -36,6 +36,14 @@ Note that this is for the menu only, and has no effect after you have selected a
 
 ![Image](images/menuPAL.jpg?raw=true)
 
+Custom PCB
+----------
+I have also designed a custom PCB for the UnoCart-2600 pictured here. This is mainly to make it easier to get people
+to test the design. The PCB design files are not currently public.
+
+![Front of PCB when inserted in Atari](images/test_board_front_small.jpg?raw=true)
+![Back of PCB when inserted in Atari](images/test_board_back_small.jpg?raw=true)
+
 Credits
 -------
 * Design, hardware and firmware by Robin Edwards (electrotrains at atariage)
