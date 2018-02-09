@@ -14,6 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+/* Version History
+ * ---------------
+ * v1.01 5/2/18 Fixed menu navigation bug after selecting a bad rom file
+ * v1.02 8/2/18 Added partial DPC support - Pitfall II works
+ */
+
 #define _GNU_SOURCE
 
 #include "defines.h"
@@ -61,6 +68,7 @@ char menu_status[16];
 #define CART_TYPE_F0	17	// 64k
 #define CART_TYPE_FA	18	// 12k
 #define CART_TYPE_E7	19	// 16k+ram
+#define CART_TYPE_DPC	20	// 8k+DPC(2k)
 
 typedef struct {
 	const char *ext;
@@ -90,6 +98,7 @@ EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
 	{"F0", CART_TYPE_F0},
 	{"FA", CART_TYPE_FA},
 	{"E7", CART_TYPE_E7},
+	{"DPC", CART_TYPE_DPC},
 	{0,0}
 };
 
@@ -406,6 +415,10 @@ int read_file(char *filename, int *cart_size_bytes)
 		else
 			cart_type = CART_TYPE_F8;
 	}
+	else if(bytes_read >= 10240 && bytes_read <= 10496)
+	{  // ~10K - Pitfall II
+		cart_type = CART_TYPE_DPC;
+	}
 	else if (bytes_read == 12*1024)
 	{
 		cart_type = CART_TYPE_FA;
@@ -508,7 +521,7 @@ void config_gpio_addr(void) {
 	GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
-/* Input Signals GPIO pins - PC0 (PAL-high/NTSC-low) */
+/* Input Signals GPIO pins - PC0, PC1 (PC0=0 PAL60, PC1=0 PAL) */
 void config_gpio_sig(void) {
 	/* GPIOC Periph clock enable */
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
@@ -1246,6 +1259,196 @@ void emulate_E7_cartridge()
 	__enable_irq();
 }
 
+/* DPC (Pitfall II) Bankswitching
+ * ------------------------------
+ * Bankswitching like F8(8k)
+ * DPC implementation based on:
+ * - Stella (https://github.com/stella-emu) - CartDPC.cxx
+ * - Kevin Horton's 2600 Mappers (http://blog.kevtris.org/blogfiles/Atari 2600 Mappers.txt)
+ *
+ * Note this is not a full implementation of DPC, but is enough to run Pitfall II and the music sounds ok.
+ */
+
+void emulate_DPC_cartridge()
+{
+	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
+	__disable_irq();	// Disable interrupts
+
+	unsigned char soundAmplitudes[8] = {0x00, 0x04, 0x05, 0x09, 0x06, 0x0a, 0x0b, 0x0f};
+
+	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
+	unsigned char *bankPtr = &cart_rom[0], *DpcDisplayPtr = &cart_rom[8*1024];
+
+	unsigned char DpcRandom, DpcTops[8], DpcBottoms[8], DpcFlags[8];
+	uint16_t DpcCounters[8];
+	int DpcMusicModes[3], DpcMusicFlags[3];
+
+	// Initialise the DPC registers
+	for(int i = 0; i < 8; ++i)
+		DpcTops[i] = DpcBottoms[i] = DpcCounters[i] = DpcFlags[i] = 0;
+
+	DpcMusicModes[0] = DpcMusicModes[1] = DpcMusicModes[2] = 0;
+	DpcMusicFlags[0] = DpcMusicFlags[1] = DpcMusicFlags[2] = 0;
+
+	// Initialise the DPC's random number generator register (must be non-zero)
+	DpcRandom = 1;
+
+	uint32_t lastSysTick = SysTick->VAL;
+	uint32_t DpcClocks = 0;
+
+	while (1)
+	{
+		while ((addr = ADDR_IN) != addr_prev)
+			addr_prev = addr;
+
+		// got a stable address
+		if (addr & 0x1000)
+		{ // A12 high
+
+			if (addr < 0x1040)
+			{	// DPC read
+				int index = addr & 0x07;
+				int function = (addr >> 3) & 0x07;
+
+				// Update flag register for selected data fetcher
+				if((DpcCounters[index] & 0x00ff) == DpcTops[index])
+					DpcFlags[index] = 0xff;
+				else if((DpcCounters[index] & 0x00ff) == DpcBottoms[index])
+					DpcFlags[index] = 0x00;
+
+				unsigned char result = 0;
+				switch (function)
+				{
+					case 0x00:
+					{
+						if(index < 4)
+						{	// random number read
+							DpcRandom = (DpcRandom << 1) | (~(((DpcRandom >> 7) ^ (DpcRandom >> 5) ^ (DpcRandom >> 4) ^ (DpcRandom >> 3))) & 1);
+							result = DpcRandom;
+						}
+						else
+						{	// sound
+							unsigned char i = 0;
+							if (DpcMusicModes[0] && DpcMusicFlags[0])
+								i |= 0x01;
+							if (DpcMusicModes[1] && DpcMusicFlags[1])
+								i |= 0x02;
+							if (DpcMusicModes[2] && DpcMusicFlags[2])
+								i |= 0x04;
+
+							result = soundAmplitudes[i];
+						}
+						break;
+					}
+
+					case 0x01:
+					{	// DFx display data read
+						result = DpcDisplayPtr[2047 - DpcCounters[index]];
+						break;
+					}
+
+					case 0x02:
+					{	// DFx display data read AND'd w/flag
+						result = DpcDisplayPtr[2047 - DpcCounters[index]] & DpcFlags[index];
+						break;
+					}
+
+					case 0x07:
+					{	// DFx flag
+						result = DpcFlags[index];
+						break;
+					}
+				}
+
+				DATA_OUT = ((uint16_t)result)<<8;
+				SET_DATA_MODE_OUT
+				// wait for address bus to change
+				while (ADDR_IN == addr) ;
+				SET_DATA_MODE_IN
+
+				// Clock the selected data fetcher's counter if needed
+				if ((index < 5) || ((index >= 5) && (!DpcMusicModes[index - 5])))
+					DpcCounters[index] = (DpcCounters[index] - 1) & 0x07ff;
+			}
+			else if (addr < 0x1080)
+			{	// DPC write
+				int index = addr & 0x07;
+				int function = (addr >> 3) & 0x07;
+
+				while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
+				unsigned char value = data_prev>>8;
+				switch (function)
+				{
+					case 0x00:
+					{	// DFx top count
+						DpcTops[index] = value;
+						DpcFlags[index] = 0x00;
+						break;
+					}
+
+					case 0x01:
+					{	// DFx bottom count
+						DpcBottoms[index] = value;
+						break;
+					}
+
+					case 0x02:
+					{	// DFx counter low
+						DpcCounters[index] = (DpcCounters[index] & 0x0700) | value;
+						break;
+					}
+
+					case 0x03:
+					{	// DFx counter high
+						DpcCounters[index] = (((uint16_t)(value & 0x07)) << 8) | (DpcCounters[index] & 0xff);
+						if(index >= 5)
+							DpcMusicModes[index - 5] = (value & 0x10);
+						break;
+					}
+
+					case 0x06:
+					{	// Random Number Generator Reset
+						DpcRandom = 1;
+						break;
+					}
+				}
+			}
+			else
+			{	// check bank-switch
+				if (addr == 0x1FF8)
+					bankPtr = &cart_rom[0];
+				else if (addr == 0x1FF9)
+					bankPtr = &cart_rom[4*1024];
+
+				// normal rom access
+				DATA_OUT = ((uint16_t)bankPtr[addr&0xFFF])<<8;
+				SET_DATA_MODE_OUT
+				// wait for address bus to change
+				while (ADDR_IN == addr) ;
+				SET_DATA_MODE_IN
+			}
+		}
+		else
+		{	// non cartridge access - e.g. sta wsync
+			while (ADDR_IN == addr) {
+				// should the DPC clock be incremented?
+				uint32_t sysTick = SysTick->VAL;
+				if (sysTick > lastSysTick)
+				{	// the 21KHz clock has wrapped, so we increase the DPC clock
+					DpcClocks++;
+					// update the music flags here, since there isn't enough time when the music register
+					// is being read.
+					DpcMusicFlags[0] = (DpcClocks % (DpcTops[5]+1)) > DpcBottoms[5];
+					DpcMusicFlags[1] = (DpcClocks % (DpcTops[6]+1)) > DpcBottoms[6];
+					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7]+1)) > DpcBottoms[7];
+				}
+				lastSysTick = sysTick;
+			}
+		}
+	}
+	__enable_irq();
+}
+
 /*************************************************************************
  * Main loop/helper functions
  *************************************************************************/
@@ -1290,6 +1493,8 @@ void emulate_cartridge(int cart_type, int cart_size_bytes)
 		emulate_FA_cartridge();
 	else if (cart_type == CART_TYPE_E7)
 		emulate_E7_cartridge();
+	else if (cart_type == CART_TYPE_DPC)
+		emulate_DPC_cartridge();
 }
 
 void convertFilenameForCart(unsigned char *dst, char *src)
@@ -1316,7 +1521,6 @@ int readDirectoryForAtari(char *path)
 	}
 	return ret;
 }
-
 int main(void)
 {
 	char curPath[256] = "";
@@ -1327,7 +1531,7 @@ int main(void)
 	config_gpio_data();
 	/* In: PD{0..15} */
 	config_gpio_addr();
-	/* In: Other Cart Input Signals - PC{0} */
+	/* In: Other Cart Input Signals - PC{0..1} */
 	config_gpio_sig();
 
 	if (!(GPIOC->IDR & 0x0001))
@@ -1359,27 +1563,32 @@ int main(void)
 		{
 			int sel = ret - CART_CMD_SEL_ITEM_n;
 			DIR_ENTRY *d = &dir_entries[sel];
-			if (d->isDir && !strcmp(d->filename, ".."))
-			{
-				int len = strlen(curPath);
-				while (len && curPath[--len] != '/');
-				curPath[len] = 0;
-			}
-			else
-			{
-				strcat(curPath, "/");
-				strcat(curPath, d->filename);
-			}
 
 			if (d->isDir)
 			{	// selection is a directory
+				if (!strcmp(d->filename, ".."))
+				{	// go back
+					int len = strlen(curPath);
+					while (len && curPath[--len] != '/');
+					curPath[len] = 0;
+				}
+				else
+				{	// go into director
+					strcat(curPath, "/");
+					strcat(curPath, d->filename);
+				}
+
 				if (!readDirectoryForAtari(curPath))
 					strcpy(menu_status, "CANT READ SD");
 				Delayms(200);
 			}
 			else
 			{	// selection is a rom file
-				cart_type = read_file(curPath, &cart_size_bytes);
+				char path[256];
+				strcpy(path, curPath);
+				strcat(path, "/");
+				strcat(path, d->filename);
+				cart_type = read_file(path, &cart_size_bytes);
 				Delayms(200);
 				if (cart_type != CART_TYPE_NONE)
 					menu_status[0xF] = 1;	// tell the atari cartridge is loaded
