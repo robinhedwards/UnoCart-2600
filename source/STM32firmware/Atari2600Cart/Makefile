@@ -1,10 +1,18 @@
+# Use the official ARM Cortex GNU toolchain
+#     (http//developer.arm.com/open-source/gnu-toolchain/gnu-rm)
+# and the open source stlink tool suite
+#     (https://github.com/texane/stlink)
+# to build and flash the firmware with this Makefile.
+#
+# Makefile derived from https://github.com/nitsky/stm32-example
+
 BUILDDIR = build
 
-DEVICE = stm32/device
-CORE = stm32/core
-PERIPH = stm32/periph
-DISCOVERY = stm32/discovery
-USB = stm32/usb
+CC = arm-none-eabi-gcc
+LD = arm-none-eabi-gcc
+OBJCOPY = arm-none-eabi-objcopy
+
+STFLASH = st-flash
 
 SOURCES = \
 	src/startup_stm32f40xx.s \
@@ -40,11 +48,6 @@ OBJECTS = $(addprefix $(BUILDDIR)/, $(addsuffix .o, $(basename $(SOURCES))))
 ELF = $(BUILDDIR)/firmware.elf
 HEX = $(BUILDDIR)/firmware.hex
 BIN = $(BUILDDIR)/firmware.bin
-
-CC = arm-none-eabi-gcc
-LD = arm-none-eabi-gcc
-AR = arm-none-eabi-ar
-OBJCOPY = arm-none-eabi-objcopy
 
 CFLAGS  = \
 	-Os -Wall -nostdlib \
@@ -88,7 +91,7 @@ $(BUILDDIR)/%.o: %.s
 	$(CC) -c $(CFLAGS) $< -o $@
 
 flash: $(BIN)
-	st-flash write $(BIN) 0x8000000
+	$(STFLASH) write $(BIN) 0x8000000
 
 clean:
 	rm -rf build
