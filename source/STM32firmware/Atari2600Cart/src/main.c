@@ -290,7 +290,7 @@ int entry_compare(const void* p1, const void* p2)
 	DIR_ENTRY* e2 = (DIR_ENTRY*)p2;
 	if (e1->isDir && !e2->isDir) return -1;
 	else if (!e1->isDir && e2->isDir) return 1;
-	else return stricmp(e1->long_filename, e2->long_filename);
+	else return strcasecmp(e1->long_filename, e2->long_filename);
 }
 
 char *get_filename_ext(char *filename) {
@@ -303,7 +303,7 @@ int is_valid_file(char *filename) {
 	char *ext = get_filename_ext(filename);
 	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
 	while (p->ext) {
-		if (stricmp(ext, p->ext) == 0)
+		if (strcasecmp(ext, p->ext) == 0)
 			return 1;
 		p++;
 	}
@@ -466,7 +466,7 @@ int read_file(char *filename, int *cart_size_bytes)
 	char *ext = get_filename_ext(filename);
 	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
 	while (p->ext) {
-		if (stricmp(ext, p->ext) == 0) {
+		if (strcasecmp(ext, p->ext) == 0) {
 			if (p->cart_type) cart_type = p->cart_type;
 			break;
 		}
