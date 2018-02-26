@@ -10,7 +10,7 @@ The various 2600 firmware ROMs (PAL/NTSC etc) are in include files. These can be
 # Building from CLI
 
 You can build and flash the firmware with the provided `Makefile`using the official
-[ARM Cortex GNU toolchain](http//developer.arm.com/open-source/gnu-toolchain/gnu-rm)
+[ARM Cortex GNU toolchain](http://developer.arm.com/open-source/gnu-toolchain/gnu-rm)
 and the open source [stlink tool suite](https://github.com/texane/stlink).
 
 ```
