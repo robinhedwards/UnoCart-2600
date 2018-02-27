@@ -50,7 +50,7 @@ HEX = $(BUILDDIR)/firmware.hex
 BIN = $(BUILDDIR)/firmware.bin
 
 CFLAGS  = \
-	-Os -Wall -nostdlib \
+	-Os -Wall -g \
    -mcpu=cortex-m4 -mthumb \
    -mfpu=fpv4-sp-d16 -mfloat-abi=softfp \
    -DSTM32F4XX \
