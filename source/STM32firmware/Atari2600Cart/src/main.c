@@ -27,8 +27,7 @@
 #include "stm32f4xx.h"
 #include "tm_stm32f4_fatfs.h"
 #include "tm_stm32f4_delay.h"
-#include <stdio.h>
-#include <string.h>
+
 #include <ctype.h>
 
 #include "firmware_pal_rom.h"
