@@ -30,6 +30,8 @@
 
 #include <ctype.h>
 
+#include "supercharger.h"
+
 #include "firmware_pal_rom.h"
 #include "firmware_pal60_rom.h"
 #include "firmware_ntsc_rom.h"
@@ -392,6 +394,10 @@ int identify_cartridge(char *filename)
 			break;
 		}
 		p++;
+	}
+
+	if (!cart_type && (image_size % 8448) == 0) {
+		cart_type = CART_TYPE_AR;
 	}
 
 	if (cart_type) {
@@ -1575,6 +1581,9 @@ void emulate_cartridge(int cart_type)
 		emulate_E7_cartridge();
 	else if (cart_type == CART_TYPE_DPC)
 		emulate_DPC_cartridge();
+	else if (cart_type == CART_TYPE_AR) {
+		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes);
+	}
 }
 
 void convertFilenameForCart(unsigned char *dst, char *src)

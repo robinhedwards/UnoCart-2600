@@ -29,6 +29,7 @@ SOURCES = \
 	Libraries/tm_stm32f4_fatfs/fatfs/drivers/fatfs_sd.c \
 	Libraries/tm_stm32f4_fatfs/fatfs/option/syscall.c \
 	Libraries/tm_stm32f4_fatfs/fatfs/ff.c \
+	src/supercharger.c \
 	src/main.c
 
 INCLUDES = \
