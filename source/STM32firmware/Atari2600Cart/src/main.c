@@ -30,21 +30,15 @@
 
 #include <ctype.h>
 
-#include "supercharger.h"
-
-#include "firmware_pal_rom.h"
-#include "firmware_pal60_rom.h"
-#include "firmware_ntsc_rom.h"
-
-unsigned const char *firmware_rom;
+#include "cartridge_io.h"
+#include "cartridge_firmware.h"
+#include "cartridge_supercharger.h"
 
 /*************************************************************************
  * Cartridge Definitions
  *************************************************************************/
 #define MAX_CART_RAM_SIZE	32	// in kilobytes
 
-unsigned char menu_ram[1024];	// < NUM_DIR_ITEMS * 12
-char menu_status[16];
 char cartridge_image_path[256];
 unsigned int cart_size_bytes;
 
@@ -577,55 +571,20 @@ void config_gpio_sig(void) {
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 
-#define ADDR_IN GPIOD->IDR
-#define DATA_IN GPIOE->IDR
-#define DATA_OUT GPIOE->ODR
-#define CONTROL_IN GPIOC->IDR
-#define SET_DATA_MODE_IN GPIOE->MODER = 0x00000000;
-#define SET_DATA_MODE_OUT GPIOE->MODER = 0x55550000;
-
 /*************************************************************************
  * Cartridge Emulation
  *************************************************************************/
 
-#define CART_CMD_SEL_ITEM_n	0x1E00
-#define CART_CMD_ROOT_DIR	0x1EF0
-#define CART_CMD_START_CART	0x1EFF
-
-#define CART_STATUS_BYTES	0x1FE0	// 16 bytes of status
-
-int emulate_firmware_cartridge() {
-	__disable_irq();	// Disable interrupts
-	uint16_t addr, addr_prev = 0;
-
-	while (1)
-	{
-		while ((addr = ADDR_IN) != addr_prev)
-			addr_prev = addr;
-		// got a stable address
-		if (addr & 0x1000)
-		{ // A12 high
-			if ((addr & 0x1F00) == 0x1E00) break;	// atari 2600 has sent a command
-			if (addr >= 0x1800 && addr < 0x1C00)
-				DATA_OUT = ((uint16_t)menu_ram[addr&0x3FF])<<8;
-			else if ((addr & 0x1FF0) == CART_STATUS_BYTES)
-				DATA_OUT = ((uint16_t)menu_status[addr&0xF])<<8;
-			else
-				DATA_OUT = ((uint16_t)firmware_rom[addr&0xFFF])<<8;
-			SET_DATA_MODE_OUT
-			// wait for address bus to change
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
-		}
+#define setup_cartridge_image(rom_size) \
+	unsigned char cart_rom[rom_size]; \
+	read_cartridge(cart_rom); \
+	if (!reboot_into_cartridge()) { \
+		__enable_irq(); \
+		return; \
 	}
 
-	__enable_irq();
-	return addr;
-}
-
 void emulate_2k_cartridge() {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -647,8 +606,7 @@ void emulate_2k_cartridge() {
 }
 
 void emulate_4k_cartridge() {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -679,9 +637,8 @@ void emulate_4k_cartridge() {
  */
 void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
 {
-	unsigned char cart_rom[cart_size_bytes];
+	setup_cartridge_image(cart_size_bytes);
 	unsigned char cart_ram[128];
-	read_cartridge(&cart_rom[0]);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -735,9 +692,8 @@ void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
  */
 void emulate_FA_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
+	setup_cartridge_image(cart_size_bytes);
 	unsigned char cart_ram[256];
-	read_cartridge(&cart_rom[0]);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -839,8 +795,7 @@ void emulate_FA_cartridge()
 */
 void emulate_FE_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -901,8 +856,7 @@ void emulate_FE_cartridge()
  */
 void emulate_3F_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	int cartPages = cart_size_bytes/2048;
@@ -969,9 +923,8 @@ enough space for 256K of RAM.  When RAM is selected, 1000-13FF is the read port 
 */
 void emulate_3E_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
+	setup_cartridge_image(cart_size_bytes);
 	unsigned char cart_ram[MAX_CART_RAM_SIZE * 1024];
-	read_cartridge(&cart_rom[0]);
 
 	__disable_irq();	// Disable interrupts
 	int cartROMPages = cart_size_bytes/2048;
@@ -1054,8 +1007,7 @@ Like F8, F6, etc. accessing one of the locations indicated will perform the swit
 */
 void emulate_E0_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1108,8 +1060,7 @@ void emulate_E0_cartridge()
  */
 void emulate_0840_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1143,9 +1094,8 @@ void emulate_0840_cartridge()
  */
 void emulate_CV_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
+	setup_cartridge_image(cart_size_bytes);
 	unsigned char cart_ram[1024];
-	read_cartridge(&cart_rom[0]);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1194,8 +1144,7 @@ void emulate_CV_cartridge()
  */
 void emulate_F0_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1251,9 +1200,8 @@ Accessing 1FE8 through 1FEB select which 256 byte bank shows up.
  */
 void emulate_E7_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
+	setup_cartridge_image(cart_size_bytes);
 	unsigned char cart_ram[2048];
-	read_cartridge(&cart_rom[0]);
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1354,8 +1302,7 @@ void emulate_E7_cartridge()
 
 void emulate_DPC_cartridge()
 {
-	unsigned char cart_rom[cart_size_bytes];
-	read_cartridge(&cart_rom[0]);
+	setup_cartridge_image(cart_size_bytes);
 
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
@@ -1599,11 +1546,12 @@ void convertFilenameForCart(unsigned char *dst, char *src)
 int readDirectoryForAtari(char *path)
 {
 	int ret = read_directory(path);
+	uint8_t *menu_ram = get_menu_ram();
 	// create a table of entries for the atari to read
 	memset(menu_ram, 0, 1024);
 	for (int i=0; i<num_dir_entries; i++)
 	{
-		unsigned char *dst = &menu_ram[i*12];
+		unsigned char *dst = menu_ram + i*12;
 		convertFilenameForCart(dst, dir_entries[i].long_filename);
 		// set the high-bit of the first character if directory
 		if (dir_entries[i].isDir) *dst += 0x80;
@@ -1623,29 +1571,24 @@ int main(void)
 	config_gpio_sig();
 
 	if (!(GPIOC->IDR & 0x0001))
-		firmware_rom = firmware_pal60_rom;
+		set_tv_mode(TV_MODE_PAL60);
 	else if (!(GPIOC->IDR & 0x0002))
-		firmware_rom = firmware_pal_rom;
+		set_tv_mode(TV_MODE_PAL);
 	else
-		firmware_rom = firmware_ntsc_rom;
+		set_tv_mode(TV_MODE_PAL60);
 
 	// set up status area
-	strcpy(menu_status, "BY R.EDWARDS");
-	menu_status[0xF] = 0;
+	set_menu_status_msg("BY R.EDWARDS");
+	set_menu_status_byte(0);
 
 	while (1) {
 		int ret = emulate_firmware_cartridge();
 
-		if (ret == CART_CMD_START_CART)
-		{
-			if (cart_type != CART_TYPE_NONE)
-				emulate_cartridge(cart_type);	// never returns
-		}
-		else if (ret == CART_CMD_ROOT_DIR)
+		if (ret == CART_CMD_ROOT_DIR)
 		{
 			curPath[0] = 0;
 			if (!readDirectoryForAtari(curPath))
-				strcpy(menu_status, "CANT READ SD");
+				set_menu_status_msg("CANT READ SD");
 		}
 		else
 		{
@@ -1667,7 +1610,7 @@ int main(void)
 				}
 
 				if (!readDirectoryForAtari(curPath))
-					strcpy(menu_status, "CANT READ SD");
+					set_menu_status_msg("CANT READ SD");
 				Delayms(200);
 			}
 			else
@@ -1678,9 +1621,9 @@ int main(void)
 				cart_type = identify_cartridge(cartridge_image_path);
 				Delayms(200);
 				if (cart_type != CART_TYPE_NONE)
-					menu_status[0xF] = 1;	// tell the atari cartridge is loaded
+					emulate_cartridge(cart_type);
 				else
-					strcpy(menu_status, "BAD ROM FILE");
+					set_menu_status_msg("BAD ROM FILE");
 			}
 		}
 	}
