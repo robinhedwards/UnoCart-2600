@@ -578,10 +578,7 @@ void config_gpio_sig(void) {
 #define setup_cartridge_image(rom_size) \
 	unsigned char cart_rom[rom_size]; \
 	read_cartridge(cart_rom); \
-	if (!reboot_into_cartridge()) { \
-		__enable_irq(); \
-		return; \
-	}
+	if (!reboot_into_cartridge()) return;
 
 void emulate_2k_cartridge() {
 	setup_cartridge_image(cart_size_bytes);
