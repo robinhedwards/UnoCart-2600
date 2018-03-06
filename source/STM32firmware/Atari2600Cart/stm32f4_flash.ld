@@ -35,7 +35,7 @@ _estack = 0x20020000;    /* end of 128K RAM */
 
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size = 0;      /* required amount of heap  */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+_Min_Stack_Size = 0x18800; /* required amount of stack */
 
 /* Specify the memory areas */
 MEMORY
@@ -115,7 +115,7 @@ SECTIONS
   _sidata = LOADADDR(.data);
 
   /* Initialized data sections goes into RAM, load LMA copy after code */
-  .data : 
+  .data :
   {
     . = ALIGN(4);
     _sdata = .;        /* create a global symbol at data start */
@@ -125,14 +125,14 @@ SECTIONS
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
   } >RAM AT> FLASH
-  
+
   _siccmram = LOADADDR(.ccmram);
 
-  /* CCM-RAM section 
-  * 
-  * IMPORTANT NOTE! 
-  * If initialized variables will be placed in this section, 
-  * the startup code needs to be modified to copy the init-values.  
+  /* CCM-RAM section
+  *
+  * IMPORTANT NOTE!
+  * If initialized variables will be placed in this section,
+  * the startup code needs to be modified to copy the init-values.
   */
   .ccmram :
   {
@@ -140,7 +140,7 @@ SECTIONS
     _sccmram = .;       /* create a global symbol at ccmram start */
     *(.ccmram)
     *(.ccmram*)
-    
+
     . = ALIGN(4);
     _eccmram = .;       /* create a global symbol at ccmram end */
   } >CCMRAM AT> FLASH

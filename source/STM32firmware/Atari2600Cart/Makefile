@@ -79,7 +79,7 @@ $(BIN): $(ELF)
 $(HEX): $(ELF)
 	$(OBJCOPY) -O ihex $< $@
 
-$(ELF): $(OBJECTS)
+$(ELF): $(OBJECTS) $(LDSCRIPT)
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS) $(LDLIBS)
 
 $(BUILDDIR)/%.o: %.c
