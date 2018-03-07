@@ -1578,6 +1578,8 @@ int main(void)
 	set_menu_status_msg("BY R.EDWARDS");
 	set_menu_status_byte(0);
 
+
+
 	while (1) {
 		int ret = emulate_firmware_cartridge();
 

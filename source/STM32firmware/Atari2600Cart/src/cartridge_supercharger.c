@@ -10,7 +10,7 @@
 
 typedef struct __attribute__((packed)) {
     uint8_t entry_lo;
-    uint8_t entri_hi;
+    uint8_t entry_hi;
     uint8_t control_word;
     uint8_t block_count;
     uint8_t checksum;
@@ -24,7 +24,7 @@ typedef struct __attribute__((packed)) {
     uint8_t block_checksum[48];
 } LoadHeader;
 
-static void setup_multiload_map(uint8_t *multiload_map, uint8_t multiload_count, const char* cartridge_path) {
+static void setup_multiload_map(uint8_t *multiload_map, uint32_t multiload_count, const char* cartridge_path) {
     FATFS fs;
     FIL fil;
     UINT bytes_read;
@@ -35,7 +35,7 @@ static void setup_multiload_map(uint8_t *multiload_map, uint8_t multiload_count,
     if (f_mount(&fs, "", 1) != FR_OK) goto unmount;
 	if (f_open(&fil, cartridge_path, FA_READ) != FR_OK) goto close;
 
-    for (uint8_t i = 0; i < multiload_count; i++) {
+    for (uint32_t i = 0; i < multiload_count; i++) {
         f_lseek(&fil, (i + 1) * 8448 - 256);
 
         f_read(&fil, &header, sizeof(LoadHeader), &bytes_read);
@@ -80,7 +80,7 @@ static void read_multiload(uint8_t *buffer, const char* cartridge_path, uint8_t 
     __disable_irq();
 }
 
-static void load_multiload(uint8_t *ram, uint8_t physical_index, const char* cartridge_path) {
+static void load_multiload(uint8_t *ram, uint8_t *rom, uint8_t physical_index, const char* cartridge_path) {
     uint8_t buffer[8448];
     LoadHeader *header = (void*)buffer + 8448 - 256;
 
@@ -93,6 +93,11 @@ static void load_multiload(uint8_t *ram, uint8_t physical_index, const char* car
 
         memcpy(ram + bank * 2048 + base * 256, buffer + 256 * i, 256);
     }
+
+    rom[0x7f0] = header->control_word;
+    rom[0x7f1] = 0x9c;
+    rom[0x7f2] = header->entry_lo;
+    rom[0x7f3] = header->entry_hi;
 }
 
 void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int image_size) {
@@ -100,14 +105,14 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
     uint8_t rom[0x0800];
     uint8_t multiload_map[0xff];
 
-    uint16_t addr = 0, addr_prev = 0, data_prev = 0, data = 0;
+    uint16_t addr = 0, addr_prev = 0, last_address = 0, data_prev = 0, data = 0;
 
     uint8_t *bank0 = ram, *bank1 = rom;
     uint32_t transition_count = 0;
     bool pending_write = false;
     bool write_ram_enabled = false;
     uint8_t data_hold = 0;
-    uint8_t multiload_count = image_size / 8448;
+    uint32_t multiload_count = image_size / 8448;
 
     memset(ram, 0, 0x1800);
 
@@ -124,14 +129,14 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
 
         if (transition_count < 6) transition_count++;
 
-        if (!(addr & 0x1000)) continue;
+        if (!(addr & 0x1000)) goto finish_cycle;
 
-        if (addr == 0x1ff9 && bank1 == rom && addr_prev <= 0xff) {
+        if (addr == 0x1ff9 && bank1 == rom && last_address <= 0xff) {
             while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
 
-            load_multiload(ram, multiload_map[data_prev >> 8], cartridge_path);
+            load_multiload(ram, rom, multiload_map[data_prev >> 8], cartridge_path);
 
-            continue;
+            goto finish_cycle;
         }
 
         uint8_t value_out = addr < 0x1800 ? bank0[addr & 0x07ff] : bank1[addr & 0x07ff];
@@ -144,7 +149,7 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
         else if (addr == 0x1ff8) {
             pending_write = false;
             write_ram_enabled = data_hold & 0x02;
-            switch (data_hold & 0x1c) {
+            switch ((data_hold & 0x1c) >> 2) {
                 case 4:
                 case 0:
                     bank0 = ram + 2048 * 2;
@@ -189,15 +194,17 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
                 bank0[addr & 0x07ff] = value_out = data_hold;
             }
             else if (bank1 != rom) {
-                bank0[addr & 0x07ff] = value_out = data_hold;
+                bank1[addr & 0x07ff] = value_out = data_hold;
             }
         }
 
         DATA_OUT = ((uint16_t)value_out)<<8;
         SET_DATA_MODE_OUT
-        // wait for address bus to change
-        while (ADDR_IN == addr) ;
-        SET_DATA_MODE_IN
+
+        finish_cycle:
+            last_address = addr;
+            while (ADDR_IN == addr) ;
+            SET_DATA_MODE_IN
     }
 
     __enable_irq();
