@@ -38,6 +38,9 @@
  * Cartridge Definitions
  *************************************************************************/
 #define MAX_CART_RAM_SIZE	32	// in kilobytes
+#define BUFFER_SIZE			96  // kilobytes
+
+uint8_t buffer[BUFFER_SIZE * 1024];
 
 char cartridge_image_path[256];
 unsigned int cart_size_bytes;
@@ -367,17 +370,15 @@ int identify_cartridge(char *filename)
 	FATFS FatFs;
 	unsigned int image_size;
 	int cart_type = CART_TYPE_NONE;
-
-	if (f_mount(&FatFs, "", 1) != FR_OK)
-		return CART_TYPE_NONE;
-
 	FIL fil;
-	if (f_open(&fil, filename, FA_READ) != FR_OK) {
-		f_mount(0, "", 1);
-		return CART_TYPE_NONE;
-	}
+
+	if (f_mount(&FatFs, "", 1) != FR_OK) return CART_TYPE_NONE;
+
+	if (f_open(&fil, filename, FA_READ) != FR_OK) goto unmount;
 
 	image_size = f_size(&fil);
+
+	if (!cart_type && (image_size % 8448) == 0) cart_type = CART_TYPE_AR;
 
 	// override type by file extension?
 	char *ext = get_filename_ext(filename);
@@ -390,33 +391,25 @@ int identify_cartridge(char *filename)
 		p++;
 	}
 
-	if (!cart_type && (image_size % 8448) == 0) {
-		cart_type = CART_TYPE_AR;
-	}
+	// We do not need to read supercharger cartridges
+	if (cart_type == CART_TYPE_AR) goto close;
 
-	if (cart_type) {
-		cart_size_bytes = image_size;
-		f_close(&fil);
-		f_mount(0, "", 1);
-
-		return cart_type;
-	}
-
-	unsigned char image[image_size];
-
+	unsigned int bytes_to_read = image_size > (BUFFER_SIZE * 1024) ? (BUFFER_SIZE * 1024) : image_size;
 	UINT bytes_read;
-	FRESULT read_result = f_read(&fil, &image[0], image_size, &bytes_read);
+	FRESULT read_result = f_read(&fil, buffer, bytes_to_read, &bytes_read);
+
+	if (read_result != FR_OK || bytes_to_read != bytes_read) {
+		cart_type = CART_TYPE_NONE;
+		goto close;
+	}
+
 	f_close(&fil);
 	f_mount(0, "", 1);
-
-	if (read_result != FR_OK || image_size != bytes_read) {
-		return CART_TYPE_NONE;
-	}
 
 	// auto-detect cart type - largely follows code in Stella's CartDetector.cpp
 	if (image_size == 2*1024)
 	{
-		if (isProbablyCV(image_size, image))
+		if (isProbablyCV(bytes_read, buffer))
 			cart_type = CART_TYPE_CV;
 		else
 			cart_type = CART_TYPE_2K;
@@ -429,21 +422,21 @@ int identify_cartridge(char *filename)
 	{
 		// First check for *potential* F8
 		unsigned char  signature[] = { 0x8D, 0xF9, 0x1F };  // STA $1FF9
-		int f8 = searchForBytes(image, image_size, signature, 3, 2);
+		int f8 = searchForBytes(buffer, bytes_read, signature, 3, 2);
 
-		if (isProbablySC(image_size, image))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F8SC;
-		else if (memcmp(image, image + 4096, 4096) == 0)
+		else if (memcmp(buffer, buffer + 4096, 4096) == 0)
 			cart_type = CART_TYPE_4K;
-		else if (isProbablyE0(image_size, image))
+		else if (isProbablyE0(bytes_read, buffer))
 			cart_type = CART_TYPE_E0;
-		else if (isProbably3E(image_size, image))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(image_size, image))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
-		else if (isProbablyFE(image_size, image) && !f8)
+		else if (isProbablyFE(bytes_read, buffer) && !f8)
 			cart_type = CART_TYPE_FE;
-		else if (isProbably0840(image_size, image))
+		else if (isProbably0840(bytes_read, buffer))
 			cart_type = CART_TYPE_0840;
 		else
 			cart_type = CART_TYPE_F8;
@@ -458,35 +451,35 @@ int identify_cartridge(char *filename)
 	}
 	else if (image_size == 16*1024)
 	{
-		if (isProbablySC(image_size, image))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F6SC;
-		else if (isProbablyE7(image_size, image))
+		else if (isProbablyE7(bytes_read, buffer))
 			cart_type = CART_TYPE_E7;
-		else if (isProbably3E(image_size, image))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
 		else
 			cart_type = CART_TYPE_F6;
 	}
 	else if (image_size == 32*1024)
 	{
-		if (isProbablySC(image_size, image))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F4SC;
-		else if (isProbably3E(image_size, image))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(image_size, image))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
 		else
 			cart_type = CART_TYPE_F4;
 	}
 	else if (image_size == 64*1024)
 	{
-		if (isProbably3E(image_size, image))
+		if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(image_size, image))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
-		else if (isProbablyEF(image_size, image))
+		else if (isProbablyEF(bytes_read, buffer))
 		{
-			if (isProbablySC(image_size, image))
+			if (isProbablySC(bytes_read, buffer))
 				cart_type = CART_TYPE_EFSC;
 			else
 				cart_type = CART_TYPE_EF;
@@ -495,26 +488,17 @@ int identify_cartridge(char *filename)
 			cart_type = CART_TYPE_F0;
 	}
 
-	cart_size_bytes = image_size;
-	return cart_type;
-}
+	close:
+		f_close(&fil);
 
-void read_cartridge(unsigned char *buffer) {
-	FATFS FatFs;
-
-	if (f_mount(&FatFs, "", 1) != FR_OK) return;
-
-	FIL fil;
-	if (f_open(&fil, cartridge_image_path, FA_READ) != FR_OK) {
+	unmount:
 		f_mount(0, "", 1);
-		return;
+
+	if (cart_type) {
+		cart_size_bytes = image_size;
 	}
 
-	UINT bytes_read;
-	f_read(&fil, buffer, cart_size_bytes, &bytes_read);
-
-	f_close(&fil);
-	f_mount(0, "", 1);
+	return cart_type;
 }
 
 /*************************************************************************
@@ -575,13 +559,17 @@ void config_gpio_sig(void) {
  * Cartridge Emulation
  *************************************************************************/
 
-#define setup_cartridge_image(rom_size) \
-	unsigned char cart_rom[rom_size]; \
-	read_cartridge(cart_rom); \
+#define setup_cartridge_image() \
+	uint8_t* cart_rom = buffer; \
+	if (!reboot_into_cartridge()) return;
+
+#define setup_cartridge_image_with_ram() \
+	uint8_t* cart_rom = buffer; \
+	uint8_t* cart_ram = buffer + cart_size_bytes + (((~cart_size_bytes & 0x03) + 1) & 0x03); \
 	if (!reboot_into_cartridge()) return;
 
 void emulate_2k_cartridge() {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -603,7 +591,7 @@ void emulate_2k_cartridge() {
 }
 
 void emulate_4k_cartridge() {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -634,8 +622,7 @@ void emulate_4k_cartridge() {
  */
 void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
 {
-	setup_cartridge_image(cart_size_bytes);
-	unsigned char cart_ram[128];
+	setup_cartridge_image_with_ram();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -689,8 +676,7 @@ void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
  */
 void emulate_FA_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
-	unsigned char cart_ram[256];
+	setup_cartridge_image_with_ram();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -792,7 +778,7 @@ void emulate_FA_cartridge()
 */
 void emulate_FE_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -853,7 +839,7 @@ void emulate_FE_cartridge()
  */
 void emulate_3F_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	int cartPages = cart_size_bytes/2048;
@@ -920,8 +906,7 @@ enough space for 256K of RAM.  When RAM is selected, 1000-13FF is the read port 
 */
 void emulate_3E_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
-	unsigned char cart_ram[MAX_CART_RAM_SIZE * 1024];
+	setup_cartridge_image_with_ram();
 
 	__disable_irq();	// Disable interrupts
 	int cartROMPages = cart_size_bytes/2048;
@@ -1004,7 +989,7 @@ Like F8, F6, etc. accessing one of the locations indicated will perform the swit
 */
 void emulate_E0_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1057,7 +1042,7 @@ void emulate_E0_cartridge()
  */
 void emulate_0840_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1091,8 +1076,7 @@ void emulate_0840_cartridge()
  */
 void emulate_CV_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
-	unsigned char cart_ram[1024];
+	setup_cartridge_image_with_ram();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1141,7 +1125,7 @@ void emulate_CV_cartridge()
  */
 void emulate_F0_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
@@ -1197,8 +1181,7 @@ Accessing 1FE8 through 1FEB select which 256 byte bank shows up.
  */
 void emulate_E7_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
-	unsigned char cart_ram[2048];
+	setup_cartridge_image_with_ram();
 
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1299,7 +1282,7 @@ void emulate_E7_cartridge()
 
 void emulate_DPC_cartridge()
 {
-	setup_cartridge_image(cart_size_bytes);
+	setup_cartridge_image();
 
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
@@ -1526,7 +1509,7 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_DPC)
 		emulate_DPC_cartridge();
 	else if (cart_type == CART_TYPE_AR) {
-		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes);
+		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer);
 	}
 }
 

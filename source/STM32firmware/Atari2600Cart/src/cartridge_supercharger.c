@@ -80,8 +80,7 @@ static void read_multiload(uint8_t *buffer, const char* cartridge_path, uint8_t 
     __disable_irq();
 }
 
-static void load_multiload(uint8_t *ram, uint8_t *rom, uint8_t physical_index, const char* cartridge_path) {
-    uint8_t buffer[8448];
+static void load_multiload(uint8_t *ram, uint8_t *rom, uint8_t physical_index, const char* cartridge_path, uint8_t *buffer) {
     LoadHeader *header = (void*)buffer + 8448 - 256;
 
     read_multiload(buffer, cartridge_path, physical_index);
@@ -100,10 +99,11 @@ static void load_multiload(uint8_t *ram, uint8_t *rom, uint8_t physical_index, c
     rom[0x7f3] = header->entry_hi;
 }
 
-void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int image_size) {
-    uint8_t ram[0x1800];
-    uint8_t rom[0x0800];
-    uint8_t multiload_map[0xff];
+void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int image_size, uint8_t* buffer) {
+    uint8_t *ram = buffer;
+    uint8_t *rom = ram + 0x1800;
+    uint8_t *multiload_map = rom + 0x0800;
+    uint8_t *multiload_buffer = multiload_map + 0x0100;
 
     uint16_t addr = 0, addr_prev = 0, last_address = 0, data_prev = 0, data = 0;
 
@@ -134,7 +134,7 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
         if (addr == 0x1ff9 && bank1 == rom && last_address <= 0xff) {
             while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
 
-            load_multiload(ram, rom, multiload_map[data_prev >> 8], cartridge_path);
+            load_multiload(ram, rom, multiload_map[data_prev >> 8], cartridge_path, multiload_buffer);
 
             goto finish_cycle;
         }
