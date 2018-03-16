@@ -560,10 +560,12 @@ void config_gpio_sig(void) {
  *************************************************************************/
 
 #define setup_cartridge_image() \
+	if (cart_size_bytes >= 0x010000) return; \
 	uint8_t* cart_rom = buffer; \
 	if (!reboot_into_cartridge()) return;
 
 #define setup_cartridge_image_with_ram() \
+	if (cart_size_bytes >= 0x010000) return; \
 	uint8_t* cart_rom = buffer; \
 	uint8_t* cart_ram = buffer + cart_size_bytes + (((~cart_size_bytes & 0x03) + 1) & 0x03); \
 	if (!reboot_into_cartridge()) return;
@@ -910,7 +912,7 @@ void emulate_3E_cartridge()
 
 	__disable_irq();	// Disable interrupts
 	int cartROMPages = cart_size_bytes/2048;
-	int cartRAMPages = MAX_CART_RAM_SIZE/1024;
+	int cartRAMPages = 32;
 
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
