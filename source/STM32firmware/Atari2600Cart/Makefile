@@ -7,6 +7,7 @@
 # Makefile derived from https://github.com/nitsky/stm32-example
 
 BUILDDIR = build
+DEPDIR = .depend/build
 
 CC = arm-none-eabi-gcc
 LD = arm-none-eabi-gcc
@@ -45,24 +46,27 @@ INCLUDES = \
 	-ILibraries/tm_stm32f4_gpio \
 	-ILibraries/tm_stm32f4_spi
 
+GARBAGE = $(DEPDIR) $(BUILDDIR)
+
 OBJECTS = $(addprefix $(BUILDDIR)/, $(addsuffix .o, $(basename $(SOURCES))))
 
 ELF = $(BUILDDIR)/firmware.elf
 HEX = $(BUILDDIR)/firmware.hex
 BIN = $(BUILDDIR)/firmware.bin
 
-CFLAGS  = \
+CFLAGS = \
+	-MT $@ -MMD -MP -MF $(DEPDIR)/$*.d \
 	-Os -Wall -g \
-   -mcpu=cortex-m4 -mthumb \
-   -mfpu=fpv4-sp-d16 -mfloat-abi=softfp \
-   -DSTM32F4XX \
-   -DSTM32F40XX \
-   -DUSE_STM32F4_DISCOVERY \
-   -DHSE_VALUE=8000000 \
-   -DUSE_STDPERIPH_DRIVER \
-   -ffunction-sections \
-   -fdata-sections \
-   $(INCLUDES)
+	-mcpu=cortex-m4 -mthumb \
+	-mfpu=fpv4-sp-d16 -mfloat-abi=softfp \
+	-DSTM32F4XX \
+	-DSTM32F40XX \
+	-DUSE_STM32F4_DISCOVERY \
+	-DHSE_VALUE=8000000 \
+	-DUSE_STDPERIPH_DRIVER \
+	-ffunction-sections \
+	-fdata-sections \
+	$(INCLUDES)
 
 LDSCRIPT = stm32f4_flash.ld
 LDFLAGS += \
@@ -86,6 +90,7 @@ $(ELF): $(OBJECTS) $(LDSCRIPT)
 
 $(BUILDDIR)/%.o: %.c
 	mkdir -p $(dir $@)
+	mkdir -p .depend/$(dir $@)
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILDDIR)/%.o: %.s
@@ -96,4 +101,8 @@ flash: $(BIN)
 	$(STFLASH) write $(BIN) 0x8000000
 
 clean:
-	rm -rf build
+	rm -rf $(GARBAGE)
+
+.PHONY: bin elf hex flash clean
+
+include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SOURCES))))
