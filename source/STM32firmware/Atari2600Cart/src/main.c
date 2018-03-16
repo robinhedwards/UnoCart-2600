@@ -44,6 +44,7 @@ uint8_t buffer[BUFFER_SIZE * 1024];
 
 char cartridge_image_path[256];
 unsigned int cart_size_bytes;
+int tv_mode;
 
 #define CART_TYPE_NONE	0
 #define CART_TYPE_2K	1
@@ -1511,7 +1512,7 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_DPC)
 		emulate_DPC_cartridge();
 	else if (cart_type == CART_TYPE_AR) {
-		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer);
+		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer, tv_mode);
 	}
 }
 
@@ -1544,6 +1545,7 @@ int main(void)
 {
 	char curPath[256] = "";
 	int cart_type = CART_TYPE_NONE;
+
 	init();
 	/* In/Out: PE{8..15} */
 	config_gpio_data();
@@ -1553,11 +1555,13 @@ int main(void)
 	config_gpio_sig();
 
 	if (!(GPIOC->IDR & 0x0001))
-		set_tv_mode(TV_MODE_PAL60);
+		tv_mode = TV_MODE_PAL60;
 	else if (!(GPIOC->IDR & 0x0002))
-		set_tv_mode(TV_MODE_PAL);
+		tv_mode = TV_MODE_PAL;
 	else
-		set_tv_mode(TV_MODE_PAL60);
+		tv_mode = TV_MODE_NTSC;
+
+	set_tv_mode(tv_mode);
 
 	// set up status area
 	set_menu_status_msg("BY R.EDWARDS");

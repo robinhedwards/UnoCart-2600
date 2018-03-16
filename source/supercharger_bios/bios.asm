@@ -28,6 +28,9 @@
 ;;   * The entry vector ($F807) must be patched into the last four bytes of the
 ;;     ROM bank
 ;;   * A canary value of zero must be placed at $FFFB
+;;   * $FFFA encodes frame rate and palette
+;;         * bit 0: 0 = NTSC/PAL60 , 1 = PAL50
+;;         * bit 1: 0 = NTSC, 1 = PAL
 ;;   * The BIOS triggers the actual load by writing the requested multiload ID
 ;;     $FFF9. The write originates from page zero.
 ;;   * After loading, the following values must be patched into the ROM:
@@ -154,8 +157,16 @@ pos:
         STA $85
         LDA #$F0
         STA $83
-        LDA #$74
-        STA COLUBK
+
+        LDX #$74
+        LDA #$02
+        BIT $FFFA
+        BEQ tiantsc
+tiapal:
+        LDX #$D4
+tiantsc:
+        STX COLUBK
+
         LDA #$0C
         STA AUDC0
         LDA #$1F
@@ -170,6 +181,17 @@ a2:
         STA WSYNC
         DEY
         BNE a2
+
+        LDA #$01
+        BIT $FFFA
+        BEQ tvntsc
+        LDY #50
+tvpal:
+        STA WSYNC
+        DEY
+        BNE tvpal
+tvntsc:
+
         STA WSYNC
         STA WSYNC
         LDA #$02
