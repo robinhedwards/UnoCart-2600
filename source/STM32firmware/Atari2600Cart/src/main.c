@@ -560,12 +560,12 @@ void config_gpio_sig(void) {
  *************************************************************************/
 
 #define setup_cartridge_image() \
-	if (cart_size_bytes >= 0x010000) return; \
+	if (cart_size_bytes > 0x010000) return; \
 	uint8_t* cart_rom = buffer; \
 	if (!reboot_into_cartridge()) return;
 
 #define setup_cartridge_image_with_ram() \
-	if (cart_size_bytes >= 0x010000) return; \
+	if (cart_size_bytes > 0x010000) return; \
 	uint8_t* cart_rom = buffer; \
 	uint8_t* cart_ram = buffer + cart_size_bytes + (((~cart_size_bytes & 0x03) + 1) & 0x03); \
 	if (!reboot_into_cartridge()) return;
