@@ -12,7 +12,7 @@
 
 #define CART_STATUS_BYTES	0x1FE0	// 16 bytes of status
 
-#define TV_MODE_NTSC    1
+#define TV_MODE_NTSC	1
 #define TV_MODE_PAL     2
 #define TV_MODE_PAL60   3
 

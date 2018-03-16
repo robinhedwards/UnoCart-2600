@@ -74,23 +74,23 @@ typedef struct {
 } EXT_TO_CART_TYPE_MAP;
 
 EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
-    {"ROM", CART_TYPE_NONE},
-    {"BIN", CART_TYPE_NONE},
-    {"A26", CART_TYPE_NONE},
-    {"2K", CART_TYPE_2K},
-    {"4K", CART_TYPE_4K},
-    {"F8", CART_TYPE_F8},
-    {"F6", CART_TYPE_F6},
-    {"F4", CART_TYPE_F4},
-    {"F8S", CART_TYPE_F8SC},
-    {"F6S", CART_TYPE_F6SC},
-    {"F4S", CART_TYPE_F4SC},
-    {"FE", CART_TYPE_FE},
-    {"3F", CART_TYPE_3F},
-    {"3E", CART_TYPE_3E},
-    {"E0", CART_TYPE_E0},
-    {"084", CART_TYPE_0840},
-    {"CV", CART_TYPE_CV},
+	{"ROM", CART_TYPE_NONE},
+	{"BIN", CART_TYPE_NONE},
+	{"A26", CART_TYPE_NONE},
+	{"2K", CART_TYPE_2K},
+	{"4K", CART_TYPE_4K},
+	{"F8", CART_TYPE_F8},
+	{"F6", CART_TYPE_F6},
+	{"F4", CART_TYPE_F4},
+	{"F8S", CART_TYPE_F8SC},
+	{"F6S", CART_TYPE_F6SC},
+	{"F4S", CART_TYPE_F4SC},
+	{"FE", CART_TYPE_FE},
+	{"3F", CART_TYPE_3F},
+	{"3E", CART_TYPE_3E},
+	{"E0", CART_TYPE_E0},
+	{"084", CART_TYPE_0840},
+	{"CV", CART_TYPE_CV},
 	{"EF", CART_TYPE_EF},
 	{"EFS", CART_TYPE_EFSC},
 	{"F0", CART_TYPE_F0},
@@ -183,14 +183,14 @@ int isProbablyE0(int size, unsigned char *bytes)
 	// $FE0 to $FF9 using absolute non-indexed addressing
 	// These signatures are attributed to the MESS project
 	unsigned char signature[8][3] = {
-		    { 0x8D, 0xE0, 0x1F },  // STA $1FE0
-		    { 0x8D, 0xE0, 0x5F },  // STA $5FE0
-		    { 0x8D, 0xE9, 0xFF },  // STA $FFE9
-		    { 0x0C, 0xE0, 0x1F },  // NOP $1FE0
-		    { 0xAD, 0xE0, 0x1F },  // LDA $1FE0
-		    { 0xAD, 0xE9, 0xFF },  // LDA $FFE9
-		    { 0xAD, 0xED, 0xFF },  // LDA $FFED
-		    { 0xAD, 0xF3, 0xBF }   // LDA $BFF3
+			{ 0x8D, 0xE0, 0x1F },  // STA $1FE0
+			{ 0x8D, 0xE0, 0x5F },  // STA $5FE0
+			{ 0x8D, 0xE9, 0xFF },  // STA $FFE9
+			{ 0x0C, 0xE0, 0x1F },  // NOP $1FE0
+			{ 0xAD, 0xE0, 0x1F },  // LDA $1FE0
+			{ 0xAD, 0xE9, 0xFF },  // LDA $FFE9
+			{ 0xAD, 0xED, 0xFF },  // LDA $FFED
+			{ 0xAD, 0xF3, 0xBF }   // LDA $BFF3
 		};
 	for (int i = 0; i < 8; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -202,17 +202,17 @@ int isProbably0840(int size, unsigned char *bytes)
 {	// 0840 cart bankswitching is triggered by accessing addresses 0x0800
 	// or 0x0840 at least twice
 	unsigned char signature1[3][3] = {
-		    { 0xAD, 0x00, 0x08 },  // LDA $0800
-		    { 0xAD, 0x40, 0x08 },  // LDA $0840
-		    { 0x2C, 0x00, 0x08 }   // BIT $0800
+			{ 0xAD, 0x00, 0x08 },  // LDA $0800
+			{ 0xAD, 0x40, 0x08 },  // LDA $0840
+			{ 0x2C, 0x00, 0x08 }   // BIT $0800
 		};
 	for (int i = 0; i < 3; ++i)
 		if(searchForBytes(bytes, size, signature1[i], 3, 2))
 			return 1;
 
 	unsigned char signature2[2][4] = {
-		    { 0x0C, 0x00, 0x08, 0x4C },  // NOP $0800; JMP ...
-		    { 0x0C, 0xFF, 0x0F, 0x4C }   // NOP $0FFF; JMP ...
+			{ 0x0C, 0x00, 0x08, 0x4C },  // NOP $0800; JMP ...
+			{ 0x0C, 0xFF, 0x0F, 0x4C }   // NOP $0FFF; JMP ...
 		};
 	for (int i = 0; i < 2; ++i)
 		if(searchForBytes(bytes, size, signature2[i], 4, 2))
@@ -225,8 +225,8 @@ int isProbablyCV(int size, unsigned char *bytes)
 { 	// CV RAM access occurs at addresses $f3ff and $f400
 	// These signatures are attributed to the MESS project
 	unsigned char signature[2][3] = {
-		    { 0x9D, 0xFF, 0xF3 },  // STA $F3FF.X
-		    { 0x99, 0x00, 0xF4 }   // STA $F400.Y
+			{ 0x9D, 0xFF, 0xF3 },  // STA $F3FF.X
+			{ 0x99, 0x00, 0xF4 }   // STA $F400.Y
 		};
 	for (int i = 0; i < 2; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -239,10 +239,10 @@ int isProbablyEF(int size, unsigned char *bytes)
 	// 0xFE0 to 0xFEF, usually with either a NOP or LDA
 	// It's likely that the code will switch to bank 0, so that's what is tested
 	unsigned char signature[4][3] = {
-		    { 0x0C, 0xE0, 0xFF },  // NOP $FFE0
-		    { 0xAD, 0xE0, 0xFF },  // LDA $FFE0
-		    { 0x0C, 0xE0, 0x1F },  // NOP $1FE0
-		    { 0xAD, 0xE0, 0x1F }   // LDA $1FE0
+			{ 0x0C, 0xE0, 0xFF },  // NOP $FFE0
+			{ 0xAD, 0xE0, 0xFF },  // LDA $FFE0
+			{ 0x0C, 0xE0, 0x1F },  // NOP $1FE0
+			{ 0xAD, 0xE0, 0x1F }   // LDA $1FE0
 		};
 	for (int i = 0; i < 4; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -253,13 +253,13 @@ int isProbablyEF(int size, unsigned char *bytes)
 int isProbablyE7(int size, unsigned char *bytes)
 { 	// These signatures are attributed to the MESS project
 	unsigned char signature[7][3] = {
-		    { 0xAD, 0xE2, 0xFF },  // LDA $FFE2
-		    { 0xAD, 0xE5, 0xFF },  // LDA $FFE5
-		    { 0xAD, 0xE5, 0x1F },  // LDA $1FE5
-		    { 0xAD, 0xE7, 0x1F },  // LDA $1FE7
-		    { 0x0C, 0xE7, 0x1F },  // NOP $1FE7
-		    { 0x8D, 0xE7, 0xFF },  // STA $FFE7
-		    { 0x8D, 0xE7, 0x1F }   // STA $1FE7
+			{ 0xAD, 0xE2, 0xFF },  // LDA $FFE2
+			{ 0xAD, 0xE5, 0xFF },  // LDA $FFE5
+			{ 0xAD, 0xE5, 0x1F },  // LDA $1FE5
+			{ 0xAD, 0xE7, 0x1F },  // LDA $1FE7
+			{ 0x0C, 0xE7, 0x1F },  // NOP $1FE7
+			{ 0x8D, 0xE7, 0xFF },  // STA $FFE7
+			{ 0x8D, 0xE7, 0x1F }   // STA $1FE7
 		};
 	for (int i = 0; i < 7; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -293,9 +293,9 @@ int entry_compare(const void* p1, const void* p2)
 }
 
 char *get_filename_ext(char *filename) {
-    char *dot = strrchr(filename, '.');
-    if(!dot || dot == filename) return "";
-    return dot + 1;
+	char *dot = strrchr(filename, '.');
+	if(!dot || dot == filename) return "";
+	return dot + 1;
 }
 
 int is_valid_file(char *filename) {
@@ -346,13 +346,13 @@ int read_directory(char *path) {
 				if (!dst->isDir)
 					if (!is_valid_file(fno.fname)) continue;
 				// copy file record
-	            strcpy(dst->filename, fno.fname);
+				strcpy(dst->filename, fno.fname);
 				if (fno.lfname[0]) {
 					strncpy(dst->long_filename, fno.lfname, 31);
 					dst->long_filename[31] = 0;
 				}
 				else strcpy(dst->long_filename, fno.fname);
-	            dst++;
+				dst++;
 				num_dir_entries++;
 			}
 			f_closedir(&dir);
@@ -764,19 +764,19 @@ void emulate_FA_cartridge()
   by Activision only uses two banks.  Furthermore, the two banks it uses
   are actually indicated by binary 110 and 111, and translated as follows:
 
-    binary 110 -> decimal 6 -> Upper 4K ROM (bank 1) @ $D000 - $DFFF
-    binary 111 -> decimal 7 -> Lower 4K ROM (bank 0) @ $F000 - $FFFF
+	binary 110 -> decimal 6 -> Upper 4K ROM (bank 1) @ $D000 - $DFFF
+	binary 111 -> decimal 7 -> Lower 4K ROM (bank 0) @ $F000 - $FFFF
 
   Since the actual bank numbers (0 and 1) do not map directly to their
   respective bitstrings (7 and 6), we simply test for D5 being 0 or 1.
   This is the significance of the test '(value & 0x20) ? 0 : 1' in the code.
 
   NOTE: Consult the patent application for more specific information, in
-        particular *why* the address $01FE will be placed on the address
-        bus after both the JSR and RTS opcodes.
+		particular *why* the address $01FE will be placed on the address
+		bus after both the JSR and RTS opcodes.
 
   @author  Stephen Anthony; with ideas/research from Christian Speckner and
-           alex_79 and TomSon (of AtariAge)
+		   alex_79 and TomSon (of AtariAge)
 */
 void emulate_FE_cartridge()
 {
@@ -1035,7 +1035,7 @@ void emulate_E0_cartridge()
  *
  * Bankswitch triggered by access to an address matching the pattern below:
  *
- * A12           A0
+ * A12		   A0
  * ----------------
  * 0 1xxx xBxx xxxx (x = don't care, B is the bank we select)
  *

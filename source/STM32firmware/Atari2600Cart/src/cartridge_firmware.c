@@ -11,15 +11,15 @@ static char menu_status[16];
 static unsigned const char *firmware_rom = firmware_ntsc_rom;
 
 void set_menu_status_msg(const char* message) {
-    strncpy(menu_status, message, 15);
+	strncpy(menu_status, message, 15);
 }
 
 void set_menu_status_byte(char status_byte) {
-    menu_status[15] = status_byte;
+	menu_status[15] = status_byte;
 }
 
 void set_tv_mode(int tv_mode) {
-    switch (tv_mode) {
+	switch (tv_mode) {
 		case TV_MODE_NTSC:
 			firmware_rom = firmware_ntsc_rom;
 			break;
@@ -35,7 +35,7 @@ void set_tv_mode(int tv_mode) {
 }
 
 uint8_t* get_menu_ram() {
-    return menu_ram;
+	return menu_ram;
 }
 
 int emulate_firmware_cartridge() {
