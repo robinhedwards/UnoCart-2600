@@ -27,26 +27,24 @@
 #include "stm32f4xx.h"
 #include "tm_stm32f4_fatfs.h"
 #include "tm_stm32f4_delay.h"
-#include <stdio.h>
-#include <string.h>
+
 #include <ctype.h>
 
-#include "firmware_pal_rom.h"
-#include "firmware_pal60_rom.h"
-#include "firmware_ntsc_rom.h"
-
-unsigned const char *firmware_rom;
+#include "cartridge_io.h"
+#include "cartridge_firmware.h"
+#include "cartridge_supercharger.h"
 
 /*************************************************************************
  * Cartridge Definitions
  *************************************************************************/
-#define MAX_CART_ROM_SIZE	64	// in kilobytes
 #define MAX_CART_RAM_SIZE	32	// in kilobytes
+#define BUFFER_SIZE			96  // kilobytes
 
-unsigned char cart_rom[MAX_CART_ROM_SIZE*1024];	// largest is 32k cart
-unsigned char cart_ram[MAX_CART_RAM_SIZE*1024];
-unsigned char menu_ram[1024];	// < NUM_DIR_ITEMS * 12
-char menu_status[16];
+uint8_t buffer[BUFFER_SIZE * 1024];
+
+char cartridge_image_path[256];
+unsigned int cart_size_bytes;
+int tv_mode;
 
 #define CART_TYPE_NONE	0
 #define CART_TYPE_2K	1
@@ -69,6 +67,7 @@ char menu_status[16];
 #define CART_TYPE_FA	18	// 12k
 #define CART_TYPE_E7	19	// 16k+ram
 #define CART_TYPE_DPC	20	// 8k+DPC(2k)
+#define CART_TYPE_AR	21  // Arcadia Supercharger (variable size)
 
 typedef struct {
 	const char *ext;
@@ -76,29 +75,30 @@ typedef struct {
 } EXT_TO_CART_TYPE_MAP;
 
 EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
-    {"ROM", CART_TYPE_NONE},
-    {"BIN", CART_TYPE_NONE},
-    {"A26", CART_TYPE_NONE},
-    {"2K", CART_TYPE_2K},
-    {"4K", CART_TYPE_4K},
-    {"F8", CART_TYPE_F8},
-    {"F6", CART_TYPE_F6},
-    {"F4", CART_TYPE_F4},
-    {"F8S", CART_TYPE_F8SC},
-    {"F6S", CART_TYPE_F6SC},
-    {"F4S", CART_TYPE_F4SC},
-    {"FE", CART_TYPE_FE},
-    {"3F", CART_TYPE_3F},
-    {"3E", CART_TYPE_3E},
-    {"E0", CART_TYPE_E0},
-    {"084", CART_TYPE_0840},
-    {"CV", CART_TYPE_CV},
+	{"ROM", CART_TYPE_NONE},
+	{"BIN", CART_TYPE_NONE},
+	{"A26", CART_TYPE_NONE},
+	{"2K", CART_TYPE_2K},
+	{"4K", CART_TYPE_4K},
+	{"F8", CART_TYPE_F8},
+	{"F6", CART_TYPE_F6},
+	{"F4", CART_TYPE_F4},
+	{"F8S", CART_TYPE_F8SC},
+	{"F6S", CART_TYPE_F6SC},
+	{"F4S", CART_TYPE_F4SC},
+	{"FE", CART_TYPE_FE},
+	{"3F", CART_TYPE_3F},
+	{"3E", CART_TYPE_3E},
+	{"E0", CART_TYPE_E0},
+	{"084", CART_TYPE_0840},
+	{"CV", CART_TYPE_CV},
 	{"EF", CART_TYPE_EF},
 	{"EFS", CART_TYPE_EFSC},
 	{"F0", CART_TYPE_F0},
 	{"FA", CART_TYPE_FA},
 	{"E7", CART_TYPE_E7},
 	{"DPC", CART_TYPE_DPC},
+	{"AR", CART_TYPE_AR},
 	{0,0}
 };
 
@@ -184,14 +184,14 @@ int isProbablyE0(int size, unsigned char *bytes)
 	// $FE0 to $FF9 using absolute non-indexed addressing
 	// These signatures are attributed to the MESS project
 	unsigned char signature[8][3] = {
-		    { 0x8D, 0xE0, 0x1F },  // STA $1FE0
-		    { 0x8D, 0xE0, 0x5F },  // STA $5FE0
-		    { 0x8D, 0xE9, 0xFF },  // STA $FFE9
-		    { 0x0C, 0xE0, 0x1F },  // NOP $1FE0
-		    { 0xAD, 0xE0, 0x1F },  // LDA $1FE0
-		    { 0xAD, 0xE9, 0xFF },  // LDA $FFE9
-		    { 0xAD, 0xED, 0xFF },  // LDA $FFED
-		    { 0xAD, 0xF3, 0xBF }   // LDA $BFF3
+			{ 0x8D, 0xE0, 0x1F },  // STA $1FE0
+			{ 0x8D, 0xE0, 0x5F },  // STA $5FE0
+			{ 0x8D, 0xE9, 0xFF },  // STA $FFE9
+			{ 0x0C, 0xE0, 0x1F },  // NOP $1FE0
+			{ 0xAD, 0xE0, 0x1F },  // LDA $1FE0
+			{ 0xAD, 0xE9, 0xFF },  // LDA $FFE9
+			{ 0xAD, 0xED, 0xFF },  // LDA $FFED
+			{ 0xAD, 0xF3, 0xBF }   // LDA $BFF3
 		};
 	for (int i = 0; i < 8; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -203,17 +203,17 @@ int isProbably0840(int size, unsigned char *bytes)
 {	// 0840 cart bankswitching is triggered by accessing addresses 0x0800
 	// or 0x0840 at least twice
 	unsigned char signature1[3][3] = {
-		    { 0xAD, 0x00, 0x08 },  // LDA $0800
-		    { 0xAD, 0x40, 0x08 },  // LDA $0840
-		    { 0x2C, 0x00, 0x08 }   // BIT $0800
+			{ 0xAD, 0x00, 0x08 },  // LDA $0800
+			{ 0xAD, 0x40, 0x08 },  // LDA $0840
+			{ 0x2C, 0x00, 0x08 }   // BIT $0800
 		};
 	for (int i = 0; i < 3; ++i)
 		if(searchForBytes(bytes, size, signature1[i], 3, 2))
 			return 1;
 
 	unsigned char signature2[2][4] = {
-		    { 0x0C, 0x00, 0x08, 0x4C },  // NOP $0800; JMP ...
-		    { 0x0C, 0xFF, 0x0F, 0x4C }   // NOP $0FFF; JMP ...
+			{ 0x0C, 0x00, 0x08, 0x4C },  // NOP $0800; JMP ...
+			{ 0x0C, 0xFF, 0x0F, 0x4C }   // NOP $0FFF; JMP ...
 		};
 	for (int i = 0; i < 2; ++i)
 		if(searchForBytes(bytes, size, signature2[i], 4, 2))
@@ -226,8 +226,8 @@ int isProbablyCV(int size, unsigned char *bytes)
 { 	// CV RAM access occurs at addresses $f3ff and $f400
 	// These signatures are attributed to the MESS project
 	unsigned char signature[2][3] = {
-		    { 0x9D, 0xFF, 0xF3 },  // STA $F3FF.X
-		    { 0x99, 0x00, 0xF4 }   // STA $F400.Y
+			{ 0x9D, 0xFF, 0xF3 },  // STA $F3FF.X
+			{ 0x99, 0x00, 0xF4 }   // STA $F400.Y
 		};
 	for (int i = 0; i < 2; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -240,10 +240,10 @@ int isProbablyEF(int size, unsigned char *bytes)
 	// 0xFE0 to 0xFEF, usually with either a NOP or LDA
 	// It's likely that the code will switch to bank 0, so that's what is tested
 	unsigned char signature[4][3] = {
-		    { 0x0C, 0xE0, 0xFF },  // NOP $FFE0
-		    { 0xAD, 0xE0, 0xFF },  // LDA $FFE0
-		    { 0x0C, 0xE0, 0x1F },  // NOP $1FE0
-		    { 0xAD, 0xE0, 0x1F }   // LDA $1FE0
+			{ 0x0C, 0xE0, 0xFF },  // NOP $FFE0
+			{ 0xAD, 0xE0, 0xFF },  // LDA $FFE0
+			{ 0x0C, 0xE0, 0x1F },  // NOP $1FE0
+			{ 0xAD, 0xE0, 0x1F }   // LDA $1FE0
 		};
 	for (int i = 0; i < 4; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -254,13 +254,13 @@ int isProbablyEF(int size, unsigned char *bytes)
 int isProbablyE7(int size, unsigned char *bytes)
 { 	// These signatures are attributed to the MESS project
 	unsigned char signature[7][3] = {
-		    { 0xAD, 0xE2, 0xFF },  // LDA $FFE2
-		    { 0xAD, 0xE5, 0xFF },  // LDA $FFE5
-		    { 0xAD, 0xE5, 0x1F },  // LDA $1FE5
-		    { 0xAD, 0xE7, 0x1F },  // LDA $1FE7
-		    { 0x0C, 0xE7, 0x1F },  // NOP $1FE7
-		    { 0x8D, 0xE7, 0xFF },  // STA $FFE7
-		    { 0x8D, 0xE7, 0x1F }   // STA $1FE7
+			{ 0xAD, 0xE2, 0xFF },  // LDA $FFE2
+			{ 0xAD, 0xE5, 0xFF },  // LDA $FFE5
+			{ 0xAD, 0xE5, 0x1F },  // LDA $1FE5
+			{ 0xAD, 0xE7, 0x1F },  // LDA $1FE7
+			{ 0x0C, 0xE7, 0x1F },  // NOP $1FE7
+			{ 0x8D, 0xE7, 0xFF },  // STA $FFE7
+			{ 0x8D, 0xE7, 0x1F }   // STA $1FE7
 		};
 	for (int i = 0; i < 7; ++i)
 		if(searchForBytes(bytes, size, signature[i], 3, 1))
@@ -290,20 +290,20 @@ int entry_compare(const void* p1, const void* p2)
 	DIR_ENTRY* e2 = (DIR_ENTRY*)p2;
 	if (e1->isDir && !e2->isDir) return -1;
 	else if (!e1->isDir && e2->isDir) return 1;
-	else return stricmp(e1->long_filename, e2->long_filename);
+	else return strcasecmp(e1->long_filename, e2->long_filename);
 }
 
 char *get_filename_ext(char *filename) {
-    char *dot = strrchr(filename, '.');
-    if(!dot || dot == filename) return "";
-    return dot + 1;
+	char *dot = strrchr(filename, '.');
+	if(!dot || dot == filename) return "";
+	return dot + 1;
 }
 
 int is_valid_file(char *filename) {
 	char *ext = get_filename_ext(filename);
 	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
 	while (p->ext) {
-		if (stricmp(ext, p->ext) == 0)
+		if (strcasecmp(ext, p->ext) == 0)
 			return 1;
 		p++;
 	}
@@ -347,13 +347,13 @@ int read_directory(char *path) {
 				if (!dst->isDir)
 					if (!is_valid_file(fno.fname)) continue;
 				// copy file record
-	            strcpy(dst->filename, fno.fname);
+				strcpy(dst->filename, fno.fname);
 				if (fno.lfname[0]) {
 					strncpy(dst->long_filename, fno.lfname, 31);
 					dst->long_filename[31] = 0;
 				}
 				else strcpy(dst->long_filename, fno.fname);
-	            dst++;
+				dst++;
 				num_dir_entries++;
 			}
 			f_closedir(&dir);
@@ -365,95 +365,122 @@ int read_directory(char *path) {
 	return ret;
 }
 
-int read_file(char *filename, int *cart_size_bytes)
+int identify_cartridge(char *filename)
 {
 	TM_DELAY_Init();
 	FATFS FatFs;
-	UINT bytes_read;
+	unsigned int image_size;
 	int cart_type = CART_TYPE_NONE;
-
-	if (f_mount(&FatFs, "", 1) != FR_OK)
-		return CART_TYPE_NONE;
 	FIL fil;
-	if (f_open(&fil, filename, FA_READ) != FR_OK)
-		goto cleanup;
-	if (f_read(&fil, &cart_rom[0], MAX_CART_ROM_SIZE*1024, &bytes_read) != FR_OK)
-		goto closefile;
+
+	if (f_mount(&FatFs, "", 1) != FR_OK) return CART_TYPE_NONE;
+
+	if (f_open(&fil, filename, FA_READ) != FR_OK) goto unmount;
+
+	image_size = f_size(&fil);
+
+	if (!cart_type && (image_size % 8448) == 0) cart_type = CART_TYPE_AR;
+
+	// override type by file extension?
+	char *ext = get_filename_ext(filename);
+	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
+	while (p->ext) {
+		if (strcasecmp(ext, p->ext) == 0) {
+			if (p->cart_type) cart_type = p->cart_type;
+			break;
+		}
+		p++;
+	}
+
+	// We do not need to read supercharger cartridges
+	if (cart_type == CART_TYPE_AR) goto close;
+
+	unsigned int bytes_to_read = image_size > (BUFFER_SIZE * 1024) ? (BUFFER_SIZE * 1024) : image_size;
+	UINT bytes_read;
+	FRESULT read_result = f_read(&fil, buffer, bytes_to_read, &bytes_read);
+
+	if (read_result != FR_OK || bytes_to_read != bytes_read) {
+		cart_type = CART_TYPE_NONE;
+		goto close;
+	}
+
+	f_close(&fil);
+	f_mount(0, "", 1);
 
 	// auto-detect cart type - largely follows code in Stella's CartDetector.cpp
-	if (bytes_read == 2*1024)
+	if (image_size == 2*1024)
 	{
-		if (isProbablyCV(bytes_read, cart_rom))
+		if (isProbablyCV(bytes_read, buffer))
 			cart_type = CART_TYPE_CV;
 		else
 			cart_type = CART_TYPE_2K;
 	}
-	else if (bytes_read == 4*1024)
+	else if (image_size == 4*1024)
 	{
 		cart_type = CART_TYPE_4K;
 	}
-	else if (bytes_read == 8*1024)
+	else if (image_size == 8*1024)
 	{
 		// First check for *potential* F8
 		unsigned char  signature[] = { 0x8D, 0xF9, 0x1F };  // STA $1FF9
-		int f8 = searchForBytes(cart_rom, bytes_read, signature, 3, 2);
+		int f8 = searchForBytes(buffer, bytes_read, signature, 3, 2);
 
-		if (isProbablySC(bytes_read, cart_rom))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F8SC;
-		else if (memcmp(cart_rom, cart_rom + 4096, 4096) == 0)
+		else if (memcmp(buffer, buffer + 4096, 4096) == 0)
 			cart_type = CART_TYPE_4K;
-		else if (isProbablyE0(bytes_read, cart_rom))
+		else if (isProbablyE0(bytes_read, buffer))
 			cart_type = CART_TYPE_E0;
-		else if (isProbably3E(bytes_read, cart_rom))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(bytes_read, cart_rom))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
-		else if (isProbablyFE(bytes_read, cart_rom) && !f8)
+		else if (isProbablyFE(bytes_read, buffer) && !f8)
 			cart_type = CART_TYPE_FE;
-		else if (isProbably0840(bytes_read, cart_rom))
+		else if (isProbably0840(bytes_read, buffer))
 			cart_type = CART_TYPE_0840;
 		else
 			cart_type = CART_TYPE_F8;
 	}
-	else if(bytes_read >= 10240 && bytes_read <= 10496)
+	else if(image_size >= 10240 && image_size <= 10496)
 	{  // ~10K - Pitfall II
 		cart_type = CART_TYPE_DPC;
 	}
-	else if (bytes_read == 12*1024)
+	else if (image_size == 12*1024)
 	{
 		cart_type = CART_TYPE_FA;
 	}
-	else if (bytes_read == 16*1024)
+	else if (image_size == 16*1024)
 	{
-		if (isProbablySC(bytes_read, cart_rom))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F6SC;
-		else if (isProbablyE7(bytes_read, cart_rom))
+		else if (isProbablyE7(bytes_read, buffer))
 			cart_type = CART_TYPE_E7;
-		else if (isProbably3E(bytes_read, cart_rom))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
 		else
 			cart_type = CART_TYPE_F6;
 	}
-	else if (bytes_read == 32*1024)
+	else if (image_size == 32*1024)
 	{
-		if (isProbablySC(bytes_read, cart_rom))
+		if (isProbablySC(bytes_read, buffer))
 			cart_type = CART_TYPE_F4SC;
-		else if (isProbably3E(bytes_read, cart_rom))
+		else if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(bytes_read, cart_rom))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
 		else
 			cart_type = CART_TYPE_F4;
 	}
-	else if (bytes_read == 64*1024)
+	else if (image_size == 64*1024)
 	{
-		if (isProbably3E(bytes_read, cart_rom))
+		if (isProbably3E(bytes_read, buffer))
 			cart_type = CART_TYPE_3E;
-		else if (isProbably3F(bytes_read, cart_rom))
+		else if (isProbably3F(bytes_read, buffer))
 			cart_type = CART_TYPE_3F;
-		else if (isProbablyEF(bytes_read, cart_rom))
+		else if (isProbablyEF(bytes_read, buffer))
 		{
-			if (isProbablySC(bytes_read, cart_rom))
+			if (isProbablySC(bytes_read, buffer))
 				cart_type = CART_TYPE_EFSC;
 			else
 				cart_type = CART_TYPE_EF;
@@ -462,22 +489,16 @@ int read_file(char *filename, int *cart_size_bytes)
 			cart_type = CART_TYPE_F0;
 	}
 
-	// override type by file extension?
-	char *ext = get_filename_ext(filename);
-	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
-	while (p->ext) {
-		if (stricmp(ext, p->ext) == 0) {
-			if (p->cart_type) cart_type = p->cart_type;
-			break;
-		}
-		p++;
-	}
-	*cart_size_bytes = bytes_read;
+	close:
+		f_close(&fil);
 
-closefile:
-	f_close(&fil);
-cleanup:
-	f_mount(0, "", 1);
+	unmount:
+		f_mount(0, "", 1);
+
+	if (cart_type) {
+		cart_size_bytes = image_size;
+	}
+
 	return cart_type;
 }
 
@@ -535,53 +556,24 @@ void config_gpio_sig(void) {
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 
-#define ADDR_IN GPIOD->IDR
-#define DATA_IN GPIOE->IDR
-#define DATA_OUT GPIOE->ODR
-#define CONTROL_IN GPIOC->IDR
-#define SET_DATA_MODE_IN GPIOE->MODER = 0x00000000;
-#define SET_DATA_MODE_OUT GPIOE->MODER = 0x55550000;
-
 /*************************************************************************
  * Cartridge Emulation
  *************************************************************************/
 
-#define CART_CMD_SEL_ITEM_n	0x1E00
-#define CART_CMD_ROOT_DIR	0x1EF0
-#define CART_CMD_START_CART	0x1EFF
+#define setup_cartridge_image() \
+	if (cart_size_bytes > 0x010000) return; \
+	uint8_t* cart_rom = buffer; \
+	if (!reboot_into_cartridge()) return;
 
-#define CART_STATUS_BYTES	0x1FE0	// 16 bytes of status
-
-int emulate_firmware_cartridge() {
-	__disable_irq();	// Disable interrupts
-	uint16_t addr, addr_prev = 0;
-
-	while (1)
-	{
-		while ((addr = ADDR_IN) != addr_prev)
-			addr_prev = addr;
-		// got a stable address
-		if (addr & 0x1000)
-		{ // A12 high
-			if ((addr & 0x1F00) == 0x1E00) break;	// atari 2600 has sent a command
-			if (addr >= 0x1800 && addr < 0x1C00)
-				DATA_OUT = ((uint16_t)menu_ram[addr&0x3FF])<<8;
-			else if ((addr & 0x1FF0) == CART_STATUS_BYTES)
-				DATA_OUT = ((uint16_t)menu_status[addr&0xF])<<8;
-			else
-				DATA_OUT = ((uint16_t)firmware_rom[addr&0xFFF])<<8;
-			SET_DATA_MODE_OUT
-			// wait for address bus to change
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
-		}
-	}
-
-	__enable_irq();
-	return addr;
-}
+#define setup_cartridge_image_with_ram() \
+	if (cart_size_bytes > 0x010000) return; \
+	uint8_t* cart_rom = buffer; \
+	uint8_t* cart_ram = buffer + cart_size_bytes + (((~cart_size_bytes & 0x03) + 1) & 0x03); \
+	if (!reboot_into_cartridge()) return;
 
 void emulate_2k_cartridge() {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
 	while (1)
@@ -602,6 +594,8 @@ void emulate_2k_cartridge() {
 }
 
 void emulate_4k_cartridge() {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
 	while (1)
@@ -631,6 +625,8 @@ void emulate_4k_cartridge() {
  */
 void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
 {
+	setup_cartridge_image_with_ram();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -683,6 +679,8 @@ void emulate_FxSC_cartridge(uint16_t lowBS, uint16_t highBS, int isSC)
  */
 void emulate_FA_cartridge()
 {
+	setup_cartridge_image_with_ram();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -767,22 +765,24 @@ void emulate_FA_cartridge()
   by Activision only uses two banks.  Furthermore, the two banks it uses
   are actually indicated by binary 110 and 111, and translated as follows:
 
-    binary 110 -> decimal 6 -> Upper 4K ROM (bank 1) @ $D000 - $DFFF
-    binary 111 -> decimal 7 -> Lower 4K ROM (bank 0) @ $F000 - $FFFF
+	binary 110 -> decimal 6 -> Upper 4K ROM (bank 1) @ $D000 - $DFFF
+	binary 111 -> decimal 7 -> Lower 4K ROM (bank 0) @ $F000 - $FFFF
 
   Since the actual bank numbers (0 and 1) do not map directly to their
   respective bitstrings (7 and 6), we simply test for D5 being 0 or 1.
   This is the significance of the test '(value & 0x20) ? 0 : 1' in the code.
 
   NOTE: Consult the patent application for more specific information, in
-        particular *why* the address $01FE will be placed on the address
-        bus after both the JSR and RTS opcodes.
+		particular *why* the address $01FE will be placed on the address
+		bus after both the JSR and RTS opcodes.
 
   @author  Stephen Anthony; with ideas/research from Christian Speckner and
-           alex_79 and TomSon (of AtariAge)
+		   alex_79 and TomSon (of AtariAge)
 */
 void emulate_FE_cartridge()
 {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -840,8 +840,10 @@ void emulate_FE_cartridge()
  * http://atariage.com/forums/topic/266245-tigervision-banking-and-low-memory-reads/
  * http://atariage.com/forums/topic/68544-3f-bankswitching/
  */
-void emulate_3F_cartridge(int cart_size_bytes)
+void emulate_3F_cartridge()
 {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	int cartPages = cart_size_bytes/2048;
 	int newPage = -1;
@@ -905,11 +907,13 @@ Writing to 3E, however, is what's new.  Writing here selects a 1K RAM bank into
 enough space for 256K of RAM.  When RAM is selected, 1000-13FF is the read port while
 1400-17FF is the write port.
 */
-void emulate_3E_cartridge(int cart_size_bytes)
+void emulate_3E_cartridge()
 {
+	setup_cartridge_image_with_ram();
+
 	__disable_irq();	// Disable interrupts
 	int cartROMPages = cart_size_bytes/2048;
-	int cartRAMPages = MAX_CART_RAM_SIZE/1024;
+	int cartRAMPages = 32;
 
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -988,6 +992,8 @@ Like F8, F6, etc. accessing one of the locations indicated will perform the swit
 */
 void emulate_E0_cartridge()
 {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
 	unsigned char curBanks[4] = {0,0,0,7};
@@ -1030,7 +1036,7 @@ void emulate_E0_cartridge()
  *
  * Bankswitch triggered by access to an address matching the pattern below:
  *
- * A12           A0
+ * A12		   A0
  * ----------------
  * 0 1xxx xBxx xxxx (x = don't care, B is the bank we select)
  *
@@ -1039,6 +1045,8 @@ void emulate_E0_cartridge()
  */
 void emulate_0840_cartridge()
 {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -1071,6 +1079,8 @@ void emulate_0840_cartridge()
  */
 void emulate_CV_cartridge()
 {
+	setup_cartridge_image_with_ram();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 
@@ -1118,6 +1128,8 @@ void emulate_CV_cartridge()
  */
 void emulate_F0_cartridge()
 {
+	setup_cartridge_image();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
 	int currentBank = 0;
@@ -1172,6 +1184,8 @@ Accessing 1FE8 through 1FEB select which 256 byte bank shows up.
  */
 void emulate_E7_cartridge()
 {
+	setup_cartridge_image_with_ram();
+
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
@@ -1271,6 +1285,8 @@ void emulate_E7_cartridge()
 
 void emulate_DPC_cartridge()
 {
+	setup_cartridge_image();
+
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
 
@@ -1453,7 +1469,7 @@ void emulate_DPC_cartridge()
  * Main loop/helper functions
  *************************************************************************/
 
-void emulate_cartridge(int cart_type, int cart_size_bytes)
+void emulate_cartridge(int cart_type)
 {
 	if (cart_type == CART_TYPE_2K)
 		emulate_2k_cartridge();
@@ -1474,9 +1490,9 @@ void emulate_cartridge(int cart_type, int cart_size_bytes)
 	else if (cart_type == CART_TYPE_FE)
 		emulate_FE_cartridge();
 	else if (cart_type == CART_TYPE_3F)
-		emulate_3F_cartridge(cart_size_bytes);
+		emulate_3F_cartridge();
 	else if (cart_type == CART_TYPE_3E)
-		emulate_3E_cartridge(cart_size_bytes);
+		emulate_3E_cartridge();
 	else if (cart_type == CART_TYPE_E0)
 		emulate_E0_cartridge();
 	else if (cart_type == CART_TYPE_0840)
@@ -1495,6 +1511,9 @@ void emulate_cartridge(int cart_type, int cart_size_bytes)
 		emulate_E7_cartridge();
 	else if (cart_type == CART_TYPE_DPC)
 		emulate_DPC_cartridge();
+	else if (cart_type == CART_TYPE_AR) {
+		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer, tv_mode);
+	}
 }
 
 void convertFilenameForCart(unsigned char *dst, char *src)
@@ -1510,11 +1529,12 @@ void convertFilenameForCart(unsigned char *dst, char *src)
 int readDirectoryForAtari(char *path)
 {
 	int ret = read_directory(path);
+	uint8_t *menu_ram = get_menu_ram();
 	// create a table of entries for the atari to read
 	memset(menu_ram, 0, 1024);
 	for (int i=0; i<num_dir_entries; i++)
 	{
-		unsigned char *dst = &menu_ram[i*12];
+		unsigned char *dst = menu_ram + i*12;
 		convertFilenameForCart(dst, dir_entries[i].long_filename);
 		// set the high-bit of the first character if directory
 		if (dir_entries[i].isDir) *dst += 0x80;
@@ -1525,7 +1545,7 @@ int main(void)
 {
 	char curPath[256] = "";
 	int cart_type = CART_TYPE_NONE;
-	int cart_size_bytes = 0;
+
 	init();
 	/* In/Out: PE{8..15} */
 	config_gpio_data();
@@ -1535,29 +1555,28 @@ int main(void)
 	config_gpio_sig();
 
 	if (!(GPIOC->IDR & 0x0001))
-		firmware_rom = firmware_pal60_rom;
+		tv_mode = TV_MODE_PAL60;
 	else if (!(GPIOC->IDR & 0x0002))
-		firmware_rom = firmware_pal_rom;
+		tv_mode = TV_MODE_PAL;
 	else
-		firmware_rom = firmware_ntsc_rom;
+		tv_mode = TV_MODE_NTSC;
+
+	set_tv_mode(tv_mode);
 
 	// set up status area
-	strcpy(menu_status, "BY R.EDWARDS");
-	menu_status[0xF] = 0;
+	set_menu_status_msg("BY R.EDWARDS");
+	set_menu_status_byte(0);
+
+
 
 	while (1) {
 		int ret = emulate_firmware_cartridge();
 
-		if (ret == CART_CMD_START_CART)
-		{
-			if (cart_type != CART_TYPE_NONE)
-				emulate_cartridge(cart_type, cart_size_bytes);	// never returns
-		}
-		else if (ret == CART_CMD_ROOT_DIR)
+		if (ret == CART_CMD_ROOT_DIR)
 		{
 			curPath[0] = 0;
 			if (!readDirectoryForAtari(curPath))
-				strcpy(menu_status, "CANT READ SD");
+				set_menu_status_msg("CANT READ SD");
 		}
 		else
 		{
@@ -1579,21 +1598,20 @@ int main(void)
 				}
 
 				if (!readDirectoryForAtari(curPath))
-					strcpy(menu_status, "CANT READ SD");
+					set_menu_status_msg("CANT READ SD");
 				Delayms(200);
 			}
 			else
 			{	// selection is a rom file
-				char path[256];
-				strcpy(path, curPath);
-				strcat(path, "/");
-				strcat(path, d->filename);
-				cart_type = read_file(path, &cart_size_bytes);
+				strcpy(cartridge_image_path, curPath);
+				strcat(cartridge_image_path, "/");
+				strcat(cartridge_image_path, d->filename);
+				cart_type = identify_cartridge(cartridge_image_path);
 				Delayms(200);
 				if (cart_type != CART_TYPE_NONE)
-					menu_status[0xF] = 1;	// tell the atari cartridge is loaded
+					emulate_cartridge(cart_type);
 				else
-					strcpy(menu_status, "BAD ROM FILE");
+					set_menu_status_msg("BAD ROM FILE");
 			}
 		}
 	}
