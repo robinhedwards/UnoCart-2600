@@ -1,4 +1,4 @@
-The current UnoCart2600 firmware (v1.02)
+The current UnoCart2600 firmware (v1.03)
 
 For use with ST-Link device and STM32 ST-Link utility.
 

@@ -51,3 +51,4 @@ The UnoCart-2600 firmware is open source under a GPL license and is hosted here.
 Credits
 -------
 * Design, hardware and firmware by Robin Edwards (electrotrains at atariage)
+* Additional work on firmware by Christian Speckner (DirtyHairy at atariage)
