@@ -536,6 +536,9 @@ reboot
 	jmp ($fffc)
 SDLogo	.byte $EE, $89, $E9, $29, $EE, $0
 	.endp
+	
+;-------------------------------------------------------------------------
+; Text output modified from https://github.com/tdididit/a26-flashcart
 ;-------------------------------------------------------------------------
 	.align $100
 PositionASpriteSubroutine 
@@ -696,158 +699,158 @@ ASCIILookupTable
        org $f500
 FontData
 
-       .byte $00 ; |        | $F0E0
-       .byte $C6 ; |XX   XX | $F0E1
-       .byte $C6 ; |XX   XX | $F0E2
-       .byte $FE ; |XXXXXXX | $F0E3
-       .byte $C6 ; |XX   XX | $F0E4
-       .byte $C6 ; |XX   XX | $F0E5
-       .byte $6C ; | XX XX  | $F0E6
-       .byte $38 ; |  XXX   | $F0E7
+       .byte $00 ; |        |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $FE ; |XXXXXXX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $6C ; | XX XX  |
+       .byte $38 ; |  XXX   |
 
-       .byte $00 ; |        | $F0E8
-       .byte $FC ; |XXXXXX  | $F0E9
-       .byte $C6 ; |XX   XX | $F0EA
-       .byte $C6 ; |XX   XX | $F0EB
-       .byte $FC ; |XXXXXX  | $F0EC
-       .byte $C6 ; |XX   XX | $F0ED
-       .byte $C6 ; |XX   XX | $F0EE
-       .byte $FC ; |XXXXXX  | $F0EF
+       .byte $00 ; |        |
+       .byte $FC ; |XXXXXX  |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $FC ; |XXXXXX  |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $FC ; |XXXXXX  |
 
-       .byte $00 ; |        | $F0F0
-       .byte $3C ; |  XXXX  | $F0F1
-       .byte $66 ; | XX  XX | $F0F2
-       .byte $C0 ; |XX      | $F0F3
-       .byte $C0 ; |XX      | $F0F4
-       .byte $C0 ; |XX      | $F0F5
-       .byte $66 ; | XX  XX | $F0F6
-       .byte $3C ; |  XXXX  | $F0F7
+       .byte $00 ; |        |
+       .byte $3C ; |  XXXX  |
+       .byte $66 ; | XX  XX |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $66 ; | XX  XX |
+       .byte $3C ; |  XXXX  |
 
-       .byte $00 ; |        | $F0F8
-       .byte $F8 ; |XXXXX   | $F0F9
-       .byte $CC ; |XX  XX  | $F0FA
-       .byte $C6 ; |XX   XX | $F0FB
-       .byte $C6 ; |XX   XX | $F0FC
-       .byte $C6 ; |XX   XX | $F0FD
-       .byte $CC ; |XX  XX  | $F0FE
-       .byte $F8 ; |XXXXX   | $F0FF
+       .byte $00 ; |        |
+       .byte $F8 ; |XXXXX   |
+       .byte $CC ; |XX  XX  |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $CC ; |XX  XX  |
+       .byte $F8 ; |XXXXX   |
 
-       .byte $00 ; |        | $F100
-       .byte $FE ; |XXXXXXX | $F101
-       .byte $C0 ; |XX      | $F102
-       .byte $C0 ; |XX      | $F103
-       .byte $F8 ; |XXXXX   | $F104
-       .byte $C0 ; |XX      | $F105
-       .byte $C0 ; |XX      | $F106
-       .byte $FE ; |XXXXXXX | $F107
+       .byte $00 ; |        |
+       .byte $FE ; |XXXXXXX |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $F8 ; |XXXXX   |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $FE ; |XXXXXXX |
 
-       .byte $00 ; |        | $F108
-       .byte $C0 ; |XX      | $F109
-       .byte $C0 ; |XX      | $F10A
-       .byte $C0 ; |XX      | $F10B
-       .byte $FC ; |XXXXXX  | $F10C
-       .byte $C0 ; |XX      | $F10D
-       .byte $C0 ; |XX      | $F10E
-       .byte $FE ; |XXXXXXX | $F10F
+       .byte $00 ; |        |
+       .byte $C0 ; |XX      | 
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $FC ; |XXXXXX  |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $FE ; |XXXXXXX |
 
-       .byte $00 ; |        | $F110
-       .byte $3E ; |  XXXXX | $F111
-       .byte $66 ; | XX  XX | $F112
-       .byte $C6 ; |XX   XX | $F113
-       .byte $CE ; |XX  XXX | $F114
-       .byte $C0 ; |XX      | $F115
-       .byte $60 ; | XX     | $F116
-       .byte $3E ; |  XXXXX | $F117
+       .byte $00 ; |        |
+       .byte $3E ; |  XXXXX |
+       .byte $66 ; | XX  XX |
+       .byte $C6 ; |XX   XX |
+       .byte $CE ; |XX  XXX |
+       .byte $C0 ; |XX      |
+       .byte $60 ; | XX     |
+       .byte $3E ; |  XXXXX |
 
-       .byte $00 ; |        | $F118
-       .byte $C6 ; |XX   XX | $F119
-       .byte $C6 ; |XX   XX | $F11A
-       .byte $C6 ; |XX   XX | $F11B
-       .byte $FE ; |XXXXXXX | $F11C
-       .byte $C6 ; |XX   XX | $F11D
-       .byte $C6 ; |XX   XX | $F11E
-       .byte $C6 ; |XX   XX | $F11F
+       .byte $00 ; |        |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $FE ; |XXXXXXX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
 
-       .byte $00 ; |        | $F120
-       .byte $78 ; | XXXX   | $F121
-       .byte $30 ; |  XX    | $F122
-       .byte $30 ; |  XX    | $F123
-       .byte $30 ; |  XX    | $F124
-       .byte $30 ; |  XX    | $F125
-       .byte $30 ; |  XX    | $F126
-       .byte $78 ; | XXXX   | $F127
+       .byte $00 ; |        |
+       .byte $78 ; | XXXX   |
+       .byte $30 ; |  XX    |
+       .byte $30 ; |  XX    |
+       .byte $30 ; |  XX    |
+       .byte $30 ; |  XX    |
+       .byte $30 ; |  XX    |
+       .byte $78 ; | XXXX   |
 
-       .byte $00 ; |        | $F128
-       .byte $7C ; | XXXXX  | $F129
-       .byte $C6 ; |XX   XX | $F12A
-       .byte $06 ; |     XX | $F12B
-       .byte $06 ; |     XX | $F12C
-       .byte $06 ; |     XX | $F12D
-       .byte $06 ; |     XX | $F12E
-       .byte $06 ; |     XX | $F12F
+       .byte $00 ; |        |
+       .byte $7C ; | XXXXX  |
+       .byte $C6 ; |XX   XX |
+       .byte $06 ; |     XX |
+       .byte $06 ; |     XX |
+       .byte $06 ; |     XX |
+       .byte $06 ; |     XX |
+       .byte $06 ; |     XX |
 
-       .byte $00 ; |        | $F130
-       .byte $CE ; |XX  XXX | $F131
-       .byte $DC ; |XX XXX  | $F132
-       .byte $F8 ; |XXXXX   | $F133
-       .byte $F0 ; |XXXX    | $F134
-       .byte $D8 ; |XX XX   | $F135
-       .byte $CC ; |XX  XX  | $F136
-       .byte $C6 ; |XX   XX | $F137
+       .byte $00 ; |        |
+       .byte $CE ; |XX  XXX |
+       .byte $DC ; |XX XXX  |
+       .byte $F8 ; |XXXXX   |
+       .byte $F0 ; |XXXX    |
+       .byte $D8 ; |XX XX   |
+       .byte $CC ; |XX  XX  |
+       .byte $C6 ; |XX   XX |
 
-       .byte $00 ; |        | $F138
-       .byte $FE ; |XXXXXXX | $F139
-       .byte $C0 ; |XX      | $F13A
-       .byte $C0 ; |XX      | $F13B
-       .byte $C0 ; |XX      | $F13C
-       .byte $C0 ; |XX      | $F13D
-       .byte $C0 ; |XX      | $F13E
-       .byte $C0 ; |XX      | $F13F
+       .byte $00 ; |        |
+       .byte $FE ; |XXXXXXX |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
 
-       .byte $00 ; |        | $F140
-       .byte $C6 ; |XX   XX | $F141
-       .byte $C6 ; |XX   XX | $F142
-       .byte $D6 ; |XX X XX | $F143
-       .byte $FE ; |XXXXXXX | $F144
-       .byte $FE ; |XXXXXXX | $F145
-       .byte $EE ; |XXX XXX | $F146
-       .byte $C6 ; |XX   XX | $F147
+       .byte $00 ; |        |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $D6 ; |XX X XX |
+       .byte $FE ; |XXXXXXX |
+       .byte $FE ; |XXXXXXX |
+       .byte $EE ; |XXX XXX |
+       .byte $C6 ; |XX   XX |
 
-       .byte $00 ; |        | $F148
-       .byte $C6 ; |XX   XX | $F149
-       .byte $CE ; |XX  XXX | $F14A
-       .byte $DE ; |XX XXXX | $F14B
-       .byte $FE ; |XXXXXXX | $F14C
-       .byte $F6 ; |XXXX XX | $F14D
-       .byte $E6 ; |XXX  XX | $F14E
-       .byte $C6 ; |XX   XX | $F14F
+       .byte $00 ; |        |
+       .byte $C6 ; |XX   XX |
+       .byte $CE ; |XX  XXX |
+       .byte $DE ; |XX XXXX |
+       .byte $FE ; |XXXXXXX |
+       .byte $F6 ; |XXXX XX |
+       .byte $E6 ; |XXX  XX |
+       .byte $C6 ; |XX   XX |
 
-       .byte $00 ; |        | $F150
-       .byte $7C ; | XXXXX  | $F151
-       .byte $C6 ; |XX   XX | $F152
-       .byte $C6 ; |XX   XX | $F153
-       .byte $C6 ; |XX   XX | $F154
-       .byte $C6 ; |XX   XX | $F155
-       .byte $C6 ; |XX   XX | $F156
-       .byte $7C ; | XXXXX  | $F157
+       .byte $00 ; |        |
+       .byte $7C ; | XXXXX  |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $7C ; | XXXXX  |
 
-       .byte $00 ; |        | $F158
-       .byte $C0 ; |XX      | $F159
-       .byte $C0 ; |XX      | $F15A
-       .byte $FC ; |XXXXXX  | $F15B
-       .byte $C6 ; |XX   XX | $F15C
-       .byte $C6 ; |XX   XX | $F15D
-       .byte $C6 ; |XX   XX | $F15E
-       .byte $FC ; |XXXXXX  | $F15F
+       .byte $00 ; |        |
+       .byte $C0 ; |XX      |
+       .byte $C0 ; |XX      |
+       .byte $FC ; |XXXXXX  |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $FC ; |XXXXXX  |
 
-       .byte $00 ; |        | $F160
-       .byte $76 ; | XXX XX | $F161
-       .byte $CC ; |XX  XX  | $F162
-       .byte $DA ; |XX XX X | $F163
-       .byte $C6 ; |XX   XX | $F164
-       .byte $C6 ; |XX   XX | $F165
-       .byte $C6 ; |XX   XX | $F166
-       .byte $7C ; | XXXXX  | $F167
+       .byte $00 ; |        |
+       .byte $76 ; | XXX XX |
+       .byte $CC ; |XX  XX  |
+       .byte $DA ; |XX XX X |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $C6 ; |XX   XX |
+       .byte $7C ; | XXXXX  |
 
        .byte $00 ; |        |
        .byte $CE ; |XX  XXX |
@@ -1121,7 +1124,7 @@ ItemsList
 ; Atari->Cart Command Area
 ;------------------------------------------------------------------
 	org $fe00
-	
+		
 ;------------------------------------------------------------------
 ; Status area dynamically filled by the cart
 ;------------------------------------------------------------------
