@@ -32,6 +32,7 @@ SOURCES = \
 	Libraries/tm_stm32f4_fatfs/fatfs/ff.c \
 	src/cartridge_firmware.c \
 	src/cartridge_supercharger.c \
+	src/flash.c \
 	src/main.c
 
 INCLUDES = \
@@ -53,6 +54,7 @@ OBJECTS = $(addprefix $(BUILDDIR)/, $(addsuffix .o, $(basename $(SOURCES))))
 ELF = $(BUILDDIR)/firmware.elf
 HEX = $(BUILDDIR)/firmware.hex
 BIN = $(BUILDDIR)/firmware.bin
+MAP = $(BUILDDIR)/firmware.map
 
 CFLAGS = \
 	-MT $@ -MMD -MP -MF $(DEPDIR)/$*.d \
@@ -73,7 +75,8 @@ LDFLAGS += \
 	-T$(LDSCRIPT) \
 	-mthumb -mcpu=cortex-m4 \
 	--specs=nosys.specs \
-	-Wl,--gc-sections
+	-Wl,--gc-sections \
+	-Wl,-Map=$(MAP)
 
 bin: $(BIN)
 hex: $(HEX)
