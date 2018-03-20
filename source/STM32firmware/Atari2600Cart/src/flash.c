@@ -81,7 +81,7 @@ static uint8_t sector_id_for_address(uint32_t address) {
     return 0xff;
 }
 
-uint32_t lowest_available_flash_address() {
+static uint32_t lowest_available_flash_address() {
     uint8_t firmware_size = FIRST_FREE_BYTE - 0x08000000;
 
     return (RESERVED_FLASH_KB * 1024) > firmware_size ?
@@ -89,20 +89,29 @@ uint32_t lowest_available_flash_address() {
         FIRST_FREE_BYTE;
 }
 
+uint32_t available_flash() {
+    uint8_t last_reserved_sector = sector_id_for_address(lowest_available_flash_address() - 1);
+    uint8_t highest_available_sector = sector_id_for_address(highest_flash_address());
+
+    if (last_reserved_sector == 0xff || highest_available_sector == 0xff) return 0;
+
+    return sector_boundaries[highest_available_sector] - sector_boundaries[last_reserved_sector];
+}
+
 bool prepare_flash(uint32_t size, flash_context* context) {
-    if (size > flash_size_bytes()) return false;
+    if (size > avaiable_flash()) return false;
 
     const uint8_t first_sector_id = sector_id_for_address(highest_flash_address() - size);
     const uint8_t last_sector_id = sector_id_for_address(highest_flash_address());
 
     if (first_sector_id == 0xff || last_sector_id == 0xff) return false;
-    if (first_sector_id <= sector_id_for_address(lowest_available_flash_address())) return false;
+    if (first_sector_id <= sector_id_for_address(lowest_available_flash_address() - 1)) return false;
 
     FLASH_Unlock();
     if (FLASH_WaitForLastOperation() != FLASH_COMPLETE) goto error;
 
     for (uint8_t sector_id = first_sector_id; sector_id <= last_sector_id; sector_id++) {
-        if (FLASH_EraseSector(flash_sector[sector_id], VoltageRange_4) != FLASH_COMPLETE) goto error;
+        if (FLASH_EraseSector(flash_sector[sector_id], VoltageRange_3) != FLASH_COMPLETE) goto error;
     }
 
     FLASH_Lock();
