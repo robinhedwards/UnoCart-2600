@@ -19,6 +19,8 @@
  * ---------------
  * v1.01 5/2/18 Fixed menu navigation bug after selecting a bad rom file
  * v1.02 8/2/18 Added partial DPC support - Pitfall II works
+ * v1.03 19/3/18 Supercharger support thanks to Christian Speckner
+ * v1.04 21/3/18 Bug fixes (file extension->cart type)
  */
 
 #define _GNU_SOURCE
@@ -37,7 +39,8 @@
 /*************************************************************************
  * Cartridge Definitions
  *************************************************************************/
-#define MAX_CART_RAM_SIZE	32	// in kilobytes
+#define MAX_CART_ROM_SIZE	64	// in kilobytes, historical to be removed
+#define MAX_CART_RAM_SIZE	32	// in kilobytes, historical to be removed
 #define BUFFER_SIZE			96  // kilobytes
 
 uint8_t buffer[BUFFER_SIZE * 1024];
@@ -374,27 +377,28 @@ int identify_cartridge(char *filename)
 	FIL fil;
 
 	if (f_mount(&FatFs, "", 1) != FR_OK) return CART_TYPE_NONE;
-
 	if (f_open(&fil, filename, FA_READ) != FR_OK) goto unmount;
 
-	image_size = f_size(&fil);
-
-	if (!cart_type && (image_size % 8448) == 0) cart_type = CART_TYPE_AR;
-
-	// override type by file extension?
+	// select type by file extension?
 	char *ext = get_filename_ext(filename);
 	EXT_TO_CART_TYPE_MAP *p = ext_to_cart_type_map;
 	while (p->ext) {
 		if (strcasecmp(ext, p->ext) == 0) {
-			if (p->cart_type) cart_type = p->cart_type;
+			cart_type = p->cart_type;
 			break;
 		}
 		p++;
 	}
 
-	// We do not need to read supercharger cartridges
+	image_size = f_size(&fil);
+
+	// Supercharger cartridges get special treatment, since we don't load the entire
+	// file into the buffer here
+	if (cart_type == CART_TYPE_NONE && (image_size % 8448) == 0)
+		cart_type = CART_TYPE_AR;
 	if (cart_type == CART_TYPE_AR) goto close;
 
+	// otherwise, read the file into the cartridge buffer
 	unsigned int bytes_to_read = image_size > (BUFFER_SIZE * 1024) ? (BUFFER_SIZE * 1024) : image_size;
 	UINT bytes_read;
 	FRESULT read_result = f_read(&fil, buffer, bytes_to_read, &bytes_read);
@@ -404,10 +408,10 @@ int identify_cartridge(char *filename)
 		goto close;
 	}
 
-	f_close(&fil);
-	f_mount(0, "", 1);
+	if (cart_type != CART_TYPE_NONE) goto close;
 
-	// auto-detect cart type - largely follows code in Stella's CartDetector.cpp
+	// If we don't already know the type (from the file extension), then we
+	// auto-detect the cart type - largely follows code in Stella's CartDetector.cpp
 	if (image_size == 2*1024)
 	{
 		if (isProbablyCV(bytes_read, buffer))
@@ -495,9 +499,8 @@ int identify_cartridge(char *filename)
 	unmount:
 		f_mount(0, "", 1);
 
-	if (cart_type) {
+	if (cart_type)
 		cart_size_bytes = image_size;
-	}
 
 	return cart_type;
 }
