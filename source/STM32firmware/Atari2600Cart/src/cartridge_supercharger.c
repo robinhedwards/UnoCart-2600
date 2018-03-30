@@ -115,14 +115,14 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
 	uint8_t *multiload_map = rom + 0x0800;
 	uint8_t *multiload_buffer = multiload_map + 0x0100;
 
-	uint16_t addr = 0, addr_prev = 0, last_address = 0, data_prev = 0, data = 0;
+	uint16_t addr = 0, addr_prev = 0, addr_prev2 = 0, last_address = 0, data_prev = 0, data = 0;
 
 	uint8_t *bank0 = ram, *bank1 = rom;
 	uint32_t transition_count = 0;
-	bool pending_write = false;
 	bool write_ram_enabled = false;
 	uint8_t data_hold = 0;
 	uint32_t multiload_count = image_size / 8448;
+	uint8_t value_out;
 
 	memset(ram, 0, 0x1800);
 
@@ -134,14 +134,25 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
 	__disable_irq();
 
 	while (1) {
-		while ((addr = ADDR_IN) != addr_prev)
+		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
+		{
+			addr_prev2 = addr_prev;
 			addr_prev = addr;
-
-		if (transition_count < 6) transition_count++;
+		}
 
 		if (!(addr & 0x1000)) goto finish_cycle;
 
+		if (write_ram_enabled && transition_count == 5 && (addr < 0x1800 || bank1 != rom))
+			value_out = data_hold;
+		else
+			value_out = addr < 0x1800 ? bank0[addr & 0x07ff] : bank1[addr & 0x07ff];
+
+		DATA_OUT = ((uint16_t)value_out)<<8;
+		SET_DATA_MODE_OUT;
+
 		if (addr == 0x1ff9 && bank1 == rom && last_address <= 0xff) {
+			SET_DATA_MODE_IN;
+
 			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
 
 			load_multiload(ram, rom, multiload_map[data_prev >> 8], cartridge_path, multiload_buffer);
@@ -149,15 +160,12 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
 			goto finish_cycle;
 		}
 
-		uint8_t value_out = addr < 0x1800 ? bank0[addr & 0x07ff] : bank1[addr & 0x07ff];
-
-		if ((addr & 0x0f00) == 0 && (!pending_write || !write_ram_enabled)) {
+		if ((addr & 0x0f00) == 0 && (transition_count > 5 || !write_ram_enabled)) {
 			data_hold = addr & 0xff;
 			transition_count = 0;
-			pending_write = true;
 		}
 		else if (addr == 0x1ff8) {
-			pending_write = false;
+			transition_count = 6;
 			write_ram_enabled = data_hold & 0x02;
 			switch ((data_hold & 0x1c) >> 2) {
 				case 4:
@@ -197,24 +205,19 @@ void emulate_supercharger_cartridge(const char* cartridge_path, unsigned int ima
 					break;
 			}
 		}
-		else if (pending_write && write_ram_enabled && transition_count == 5) {
-			pending_write = false;
-
-			if (addr < 0x1800) {
-				bank0[addr & 0x07ff] = value_out = data_hold;
-			}
-			else if (bank1 != rom) {
-				bank1[addr & 0x07ff] = value_out = data_hold;
-			}
+		else if (write_ram_enabled && transition_count == 5) {
+			if (addr < 0x1800)
+				bank0[addr & 0x07ff] = data_hold;
+			else if (bank1 != rom)
+				bank1[addr & 0x07ff] = data_hold;
 		}
 
-		DATA_OUT = ((uint16_t)value_out)<<8;
-		SET_DATA_MODE_OUT
-
 		finish_cycle:
+			if (transition_count < 6) transition_count++;
+
 			last_address = addr;
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
+			while (ADDR_IN == addr);
+			SET_DATA_MODE_IN;
 	}
 
 	__enable_irq();
