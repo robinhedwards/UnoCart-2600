@@ -4,6 +4,7 @@
 ; Version History
 ; ---------------
 ; v1.01 25/1/18 Added Select/Reset as alternative to joysitck for menu navigation
+; v1.02 28/3/18 Adds read to $1FF4 on init, to unlock the comms area on the cartridge
 
 ; @com.wudsn.ide.asm.hardware=ATARI2600
 	icl "vcs.asm"
@@ -110,12 +111,19 @@ init	sta $00,x		;Clear TIA ($00-$3f) and 128 bytes of RAM ($80-$ff)
 	txs			;Set stack pointer to $ff
 
 ; multicart init
+	; the firmware looks for an access to $1FF4 before unlocking the comms area ($1Exx).
+	; this is because the 7800 firmware accesses this area on power-up, and we want to ignore
+	; these reads until the 7800 has started the cart in 2600 mode.
+	lda $1FF4
+	
 	jsr PrepareWaitCartRoutine
 	ldx #$F0 ; CART_CMD_ROOT_DIR
 	jsr WaitCart
+	
 ; main sd navigation loop
 loop	jsr InitMenu
 	jsr Menu
+	
 ; an item has been selected from the menu
 	jsr PrepareWaitCartRoutine
 	ldx CurItem

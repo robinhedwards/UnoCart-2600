@@ -21,6 +21,7 @@
  * v1.02 8/2/18 Added partial DPC support - Pitfall II works
  * v1.03 19/3/18 Supercharger support thanks to Christian Speckner
  * v1.04 21/3/18 Bug fixes (file extension->cart type)
+ * v1.05 29/3/18 Firmware compatible with the 7800 bios
  */
 
 #define _GNU_SOURCE
@@ -837,8 +838,10 @@ void emulate_FE_cartridge()
  *
  * From an post by Eckhard Stolberg, it seems the switch would happen on a real cart
  * only when the access is followed by an access to an address between $1000 and $1FFF.
- * This check is implemented below, and seems to work.
-
+ *
+ * 29/3/18 - The emulation below switches on access to $003f only, since the my prior
+ * attempt at the banking scheme described by Eckhard Stolberg didn't work on a 7800.
+ *
  * Refs:
  * http://atariage.com/forums/topic/266245-tigervision-banking-and-low-memory-reads/
  * http://atariage.com/forums/topic/68544-3f-bankswitching/
@@ -849,12 +852,45 @@ void emulate_3F_cartridge()
 
 	__disable_irq();	// Disable interrupts
 	int cartPages = cart_size_bytes/2048;
-	int newPage = -1;
 
-	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
+	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
 	unsigned char *fixedPtr = &cart_rom[(cartPages-1)*2048];
 
+	while (1)
+	{
+		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
+		{	// new more robust test for stable address (seems to be needed for 7800)
+			addr_prev2 = addr_prev;
+			addr_prev = addr;
+		}
+		// got a stable address
+		if (!(addr & 0x1000))
+		{	// A12 low, read last data on the bus before the address lines change
+			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
+			if (addr == 0x003F)
+			{	// switch bank
+				int newPage = (data_prev>>8) % cartPages;
+				bankPtr = &cart_rom[newPage*2048];
+			}
+		}
+		else
+		{ // A12 high
+			if (addr & 0x800)
+				DATA_OUT = ((uint16_t)fixedPtr[addr&0x7FF])<<8;
+			else
+				DATA_OUT = ((uint16_t)bankPtr[addr&0x7FF])<<8;
+			SET_DATA_MODE_OUT
+			// wait for address bus to change
+			while (ADDR_IN == addr) ;
+			SET_DATA_MODE_IN
+		}
+	}
+	__enable_irq();
+}
+
+/* Scheme as described by Eckhard Stolberg. Didn't work on my test 7800, so replaced
+ * by the simpler 3F only scheme above.
 	while (1)
 	{
 		while ((addr = ADDR_IN) != addr_prev)
@@ -883,8 +919,7 @@ void emulate_3F_cartridge()
 			SET_DATA_MODE_IN
 		}
 	}
-	__enable_irq();
-}
+ */
 
 /* 3E (3F + RAM) Bankswitching
  * ------------------------------
@@ -918,15 +953,18 @@ void emulate_3E_cartridge()
 	int cartROMPages = cart_size_bytes/2048;
 	int cartRAMPages = 32;
 
-	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
+	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0];
 	unsigned char *fixedPtr = &cart_rom[(cartROMPages-1)*2048];
 	int bankIsRAM = 0;
 
 	while (1)
 	{
-		while ((addr = ADDR_IN) != addr_prev)
+		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
+		{	// new more robust test for stable address (seems to be needed for 7800)
+			addr_prev2 = addr_prev;
 			addr_prev = addr;
+		}
 		// got a stable address
 		if (addr & 0x1000)
 		{ // A12 high
@@ -1051,23 +1089,31 @@ void emulate_0840_cartridge()
 	setup_cartridge_image();
 
 	__disable_irq();	// Disable interrupts
-	uint16_t addr, addr_prev = 0;
+	uint16_t addr, addr_prev = 0, addr_prev2 = 0;
 	unsigned char *bankPtr = &cart_rom[0];
 
 	while (1)
 	{
-		while ((addr = ADDR_IN) != addr_prev)
+		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
+		{	// new more robust test for stable address (seems to be needed for 7800)
+			addr_prev2 = addr_prev;
 			addr_prev = addr;
+		}
 		// got a stable address
-		if ((addr & 0x1840) == 0x0800) bankPtr = &cart_rom[0];
-		else if ((addr & 0x1840) == 0x0840) bankPtr = &cart_rom[4*1024];
-		else if (addr & 0x1000)
+		if (addr & 0x1000)
 		{ // A12 high
 			DATA_OUT = ((uint16_t)bankPtr[addr&0xFFF])<<8;
 			SET_DATA_MODE_OUT
 			// wait for address bus to change
 			while (ADDR_IN == addr) ;
 			SET_DATA_MODE_IN
+		}
+		else
+		{
+			if ((addr & 0x0840) == 0x0800) bankPtr = &cart_rom[0];
+			else if ((addr & 0x0840) == 0x0840) bankPtr = &cart_rom[4*1024];
+			// wait for address bus to change
+			while (ADDR_IN == addr) ;
 		}
 	}
 	__enable_irq();

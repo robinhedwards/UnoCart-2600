@@ -38,10 +38,14 @@ uint8_t* get_menu_ram() {
 	return menu_ram;
 }
 
+// We require the menu to do a write to $1FF4 to unlock the comms area.
+// This is because the 7800 bios accesses this area on console startup, and we wish to ignore these
+// spurious reads until it has started the cartridge in 2600 mode.
+bool comms_enabled = false;
+
 int emulate_firmware_cartridge() {
 	__disable_irq();	// Disable interrupts
 	uint16_t addr, addr_prev = 0;
-
 	while (1)
 	{
 		while ((addr = ADDR_IN) != addr_prev)
@@ -49,17 +53,33 @@ int emulate_firmware_cartridge() {
 		// got a stable address
 		if (addr & 0x1000)
 		{ // A12 high
-			if ((addr & 0x1F00) == 0x1E00) break;	// atari 2600 has sent a command
-			if (addr >= 0x1800 && addr < 0x1C00)
-				DATA_OUT = ((uint16_t)menu_ram[addr&0x3FF])<<8;
-			else if ((addr & 0x1FF0) == CART_STATUS_BYTES)
-				DATA_OUT = ((uint16_t)menu_status[addr&0xF])<<8;
+			if (comms_enabled)
+			{	// normal mode, once the cartridge code has done its init.
+				// on a 7800, we know we are in 2600 mode now.
+				if ((addr & 0x1F00) == 0x1E00) break;	// atari 2600 has sent a command
+				if (addr >= 0x1800 && addr < 0x1C00)
+					DATA_OUT = ((uint16_t)menu_ram[addr&0x3FF])<<8;
+				else if ((addr & 0x1FF0) == CART_STATUS_BYTES)
+					DATA_OUT = ((uint16_t)menu_status[addr&0xF])<<8;
+				else
+					DATA_OUT = ((uint16_t)firmware_rom[addr&0xFFF])<<8;
+				SET_DATA_MODE_OUT
+				// wait for address bus to change
+				while (ADDR_IN == addr) ;
+				SET_DATA_MODE_IN
+			}
 			else
+			{	// prior to an access to $1FF4, we might be running on a 7800 with the CPU at
+				// ~1.8MHz so we've got less time than usual - keep this short.
 				DATA_OUT = ((uint16_t)firmware_rom[addr&0xFFF])<<8;
-			SET_DATA_MODE_OUT
-			// wait for address bus to change
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
+				SET_DATA_MODE_OUT
+				// wait for address bus to change
+				while (ADDR_IN == addr) ;
+				SET_DATA_MODE_IN
+
+				if (addr == 0x1FF4)
+					comms_enabled = true;
+			}
 		}
 	}
 
