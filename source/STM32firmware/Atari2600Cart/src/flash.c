@@ -75,7 +75,7 @@ static uint8_t sector_id_for_address(uint32_t address) {
     if (address < 0x08000000) return 0xff;
 
     for (uint8_t i = 0; i < 24; i++) {
-        if (address < sector_boundaries[i]) return  i;
+        if (address < sector_boundaries[i]) return i;
     }
 
     return 0xff;
@@ -99,9 +99,9 @@ uint32_t available_flash() {
 }
 
 bool prepare_flash(uint32_t size, flash_context* context) {
-    if (size > avaiable_flash()) return false;
+    if (size > avaiable_flash() || size == 0) return false;
 
-    const uint8_t first_sector_id = sector_id_for_address(highest_flash_address() - size);
+    const uint8_t first_sector_id = sector_id_for_address(highest_flash_address() - size + 1);
     const uint8_t last_sector_id = sector_id_for_address(highest_flash_address());
 
     if (first_sector_id == 0xff || last_sector_id == 0xff) return false;
@@ -116,7 +116,7 @@ bool prepare_flash(uint32_t size, flash_context* context) {
 
     FLASH_Lock();
 
-    context->next_write_target = highest_flash_address() - size;
+    context->next_write_target = highest_flash_address() - size + 1;
     context->base = (uint8_t*)(context->next_write_target);
 
     return true;
@@ -133,7 +133,7 @@ bool write_flash(uint32_t byte_count, uint8_t* buffer, flash_context *context) {
     FLASH_Unlock();
     if (FLASH_WaitForLastOperation() != FLASH_COMPLETE) goto error;
 
-    if (((uint32_t)buffer & 0x03) == 0x00 && (context->next_write_target & 0x03) == 0x00) {
+    if (((uint32_t)buffer & 0x03) == 0x00 && (context->next_write_target & 0x03) == 0x00 && (byte_count & 0x03) == 0x00) {
         for (uint32_t i = 0; i < byte_count >> 2; i++) {
             if (FLASH_ProgramWord(context->next_write_target, *((uint32_t*)buffer)) != FLASH_COMPLETE)
                 goto error;
@@ -142,7 +142,7 @@ bool write_flash(uint32_t byte_count, uint8_t* buffer, flash_context *context) {
             buffer += 4;
         }
     }
-    else if (((uint32_t)buffer & 0x01) == 0x00 && (context->next_write_target & 0x01) == 0x00) {
+    else if (((uint32_t)buffer & 0x01) == 0x00 && (context->next_write_target & 0x01) == 0x00 && (byte_count & 0x01) == 0) {
         for (uint32_t i = 0; i < byte_count >> 1; i++) {
             if (FLASH_ProgramHalfWord(context->next_write_target, *((uint16_t*)buffer)) != FLASH_COMPLETE)
                 goto error;

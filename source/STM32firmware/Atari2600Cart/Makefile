@@ -32,6 +32,7 @@ SOURCES = \
 	Libraries/tm_stm32f4_fatfs/fatfs/ff.c \
 	src/cartridge_firmware.c \
 	src/cartridge_supercharger.c \
+	src/cartridge_3f.c \
 	src/flash.c \
 	src/main.c
 
