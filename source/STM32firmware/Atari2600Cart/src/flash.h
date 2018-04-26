@@ -9,7 +9,7 @@ typedef struct {
     uint32_t next_write_target;
 } flash_context;
 
-uint32_t avaiable_flash();
+uint32_t available_flash();
 
 bool prepare_flash(uint32_t size, flash_context *context);
 

@@ -48,7 +48,7 @@ static bool setup_cartridge_image(const char* filename, uint32_t image_size, uin
     if (layout->max_ccm_bank != layout->max_bank) {
         uint32_t flash_image_size = image_size - (layout->max_ccm_bank + 1) * 2048;
 
-        if (flash_image_size > avaiable_flash()) goto fail_close;
+        if (flash_image_size > available_flash()) goto fail_close;
 
         flash_context ctx;
 
@@ -89,22 +89,26 @@ void emulate_3f_cartridge(const char* filename, uint32_t image_size, uint8_t* bu
 
     if (!setup_cartridge_image(filename, image_size, buffer, &layout)) return;
 
-    uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
+    uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
 	uint8_t *bankPtr = buffer;
 	uint8_t *fixedPtr;
 
     if (layout.max_bank <= layout.max_ram_bank) fixedPtr = buffer + layout.max_bank * 2048;
     else if (layout.max_bank <= layout.max_ccm_bank) fixedPtr = CCM_RAM + (layout.max_bank - layout.max_ram_bank - 1) * 2048;
-    else fixedPtr = layout.flash_base + (layout.max_bank - layout.max_ccm_bank - 1) * 1024;
+    else fixedPtr = layout.flash_base + (layout.max_bank - layout.max_ccm_bank - 1) * 2048;
 
     if (!reboot_into_cartridge()) return;
     __disable_irq();
 
 	while (1)
 	{
-		while ((addr = ADDR_IN) != addr_prev)
+		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
+		{
+			addr_prev2 = addr_prev;
 			addr_prev = addr;
-		// got a stable address
+		}
+
+        // got a stable address
 		if (addr == 0x3f)
 		{	// A12 low, read last data on the bus before the address lines change
 			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
@@ -122,7 +126,7 @@ void emulate_3f_cartridge(const char* filename, uint32_t image_size, uint8_t* bu
 				data = fixedPtr[addr&0x7FF];
 			else
 				data = bankPtr[addr&0x7FF];
-			DATA_OUT = data<<8;
+			DATA_OUT = ((uint16_t)data)<<8;
 			SET_DATA_MODE_OUT
 			// wait for address bus to change
 			while (ADDR_IN == addr) ;

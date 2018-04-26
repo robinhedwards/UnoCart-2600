@@ -99,7 +99,7 @@ uint32_t available_flash() {
 }
 
 bool prepare_flash(uint32_t size, flash_context* context) {
-    if (size > avaiable_flash() || size == 0) return false;
+    if (size > available_flash() || size == 0) return false;
 
     const uint8_t first_sector_id = sector_id_for_address(highest_flash_address() - size + 1);
     const uint8_t last_sector_id = sector_id_for_address(highest_flash_address());

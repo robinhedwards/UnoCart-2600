@@ -22,6 +22,7 @@ SOURCES = \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c \
+	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c \
 	Libraries/tm_stm32f4_spi/tm_stm32f4_spi.c \
 	Libraries/tm_stm32f4_gpio/tm_stm32f4_gpio.c \
 	Libraries/tm_stm32f4_fatfs/tm_stm32f4_fatfs.c \

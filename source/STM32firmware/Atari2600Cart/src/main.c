@@ -36,6 +36,7 @@
 #include "cartridge_io.h"
 #include "cartridge_firmware.h"
 #include "cartridge_supercharger.h"
+#include "cartridge_3f.h"
 
 /*************************************************************************
  * Cartridge Definitions
@@ -824,71 +825,6 @@ void emulate_FE_cartridge()
 	__enable_irq();
 }
 
-/* 3F (Tigervision) Bankswitching
- * ------------------------------
- * Generally 8K ROMs, containing 4 x 2K banks. The last bank is always mapped into
- * the upper part of the 4K cartridge ROM space. The bank mapped into the lower part
- * of the 4K cartridge ROM space is selected by the lowest two bits written to $003F
- * (or any lower address).
- * In theory this scheme supports up to 512k ROMs if we use all the bits written to
- * $003F - the code below should support up to MAX_CART_ROM_SIZE.
- *
- * Note - Stella restricts bank switching to only *WRITES* to $0000-$003f. But we
- * can't do this here and Miner 2049'er crashes (unless we restrict to $003f only).
- *
- * From an post by Eckhard Stolberg, it seems the switch would happen on a real cart
- * only when the access is followed by an access to an address between $1000 and $1FFF.
- *
- * 29/3/18 - The emulation below switches on access to $003f only, since the my prior
- * attempt at the banking scheme described by Eckhard Stolberg didn't work on a 7800.
- *
- * Refs:
- * http://atariage.com/forums/topic/266245-tigervision-banking-and-low-memory-reads/
- * http://atariage.com/forums/topic/68544-3f-bankswitching/
- */
-void emulate_3F_cartridge()
-{
-	setup_cartridge_image();
-
-	__disable_irq();	// Disable interrupts
-	int cartPages = cart_size_bytes/2048;
-
-	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
-	unsigned char *bankPtr = &cart_rom[0];
-	unsigned char *fixedPtr = &cart_rom[(cartPages-1)*2048];
-
-	while (1)
-	{
-		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
-		{	// new more robust test for stable address (seems to be needed for 7800)
-			addr_prev2 = addr_prev;
-			addr_prev = addr;
-		}
-		// got a stable address
-		if (!(addr & 0x1000))
-		{	// A12 low, read last data on the bus before the address lines change
-			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-			if (addr == 0x003F)
-			{	// switch bank
-				int newPage = (data_prev>>8) % cartPages;
-				bankPtr = &cart_rom[newPage*2048];
-			}
-		}
-		else
-		{ // A12 high
-			if (addr & 0x800)
-				DATA_OUT = ((uint16_t)fixedPtr[addr&0x7FF])<<8;
-			else
-				DATA_OUT = ((uint16_t)bankPtr[addr&0x7FF])<<8;
-			SET_DATA_MODE_OUT
-			// wait for address bus to change
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
-		}
-	}
-	__enable_irq();
-}
-
 /* Scheme as described by Eckhard Stolberg. Didn't work on my test 7800, so replaced
  * by the simpler 3F only scheme above.
 	while (1)
@@ -1539,7 +1475,7 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_FE)
 		emulate_FE_cartridge();
 	else if (cart_type == CART_TYPE_3F)
-		emulate_3F_cartridge();
+		emulate_3f_cartridge(cartridge_image_path, cart_size_bytes, buffer);
 	else if (cart_type == CART_TYPE_3E)
 		emulate_3E_cartridge();
 	else if (cart_type == CART_TYPE_E0)
@@ -1615,8 +1551,6 @@ int main(void)
 	// set up status area
 	set_menu_status_msg("BY R.EDWARDS");
 	set_menu_status_byte(0);
-
-
 
 	while (1) {
 		int ret = emulate_firmware_cartridge();
