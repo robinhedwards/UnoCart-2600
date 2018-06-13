@@ -37,6 +37,7 @@
 #include "cartridge_firmware.h"
 #include "cartridge_supercharger.h"
 #include "cartridge_3f.h"
+#include "cartridge_3e.h"
 
 /*************************************************************************
  * Cartridge Definitions
@@ -63,16 +64,17 @@ int tv_mode;
 #define CART_TYPE_FE	9	// 8k
 #define CART_TYPE_3F	10	// varies (examples 8k)
 #define CART_TYPE_3E	11	// varies (only example 32k)
-#define CART_TYPE_E0	12	// 8k
-#define CART_TYPE_0840	13	// 8k
-#define CART_TYPE_CV	14	// 2k+ram
-#define CART_TYPE_EF	15	// 64k
-#define CART_TYPE_EFSC	16	// 64k+ram
-#define CART_TYPE_F0	17	// 64k
-#define CART_TYPE_FA	18	// 12k
-#define CART_TYPE_E7	19	// 16k+ram
-#define CART_TYPE_DPC	20	// 8k+DPC(2k)
-#define CART_TYPE_AR	21  // Arcadia Supercharger (variable size)
+#define CART_TYPE_3EX   12
+#define CART_TYPE_E0	13	// 8k
+#define CART_TYPE_0840	14	// 8k
+#define CART_TYPE_CV	15	// 2k+ram
+#define CART_TYPE_EF	16	// 64k
+#define CART_TYPE_EFSC	17	// 64k+ram
+#define CART_TYPE_F0	18	// 64k
+#define CART_TYPE_FA	19	// 12k
+#define CART_TYPE_E7	20	// 16k+ram
+#define CART_TYPE_DPC	21	// 8k+DPC(2k)
+#define CART_TYPE_AR	22  // Arcadia Supercharger (variable size)
 
 typedef struct {
 	const char *ext;
@@ -94,6 +96,7 @@ EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
 	{"FE", CART_TYPE_FE},
 	{"3F", CART_TYPE_3F},
 	{"3E", CART_TYPE_3E},
+	{"3EX", CART_TYPE_3E},
 	{"E0", CART_TYPE_E0},
 	{"084", CART_TYPE_0840},
 	{"CV", CART_TYPE_CV},
@@ -857,96 +860,6 @@ void emulate_FE_cartridge()
 	}
  */
 
-/* 3E (3F + RAM) Bankswitching
- * ------------------------------
- * This scheme supports up to 512k ROM and 256K RAM.
- * However here we only support up to MAX_CART_ROM_SIZE and MAX_CART_RAM_SIZE
- *
- * The text below is the best description of the mapping scheme I could find,
- * quoted from http://blog.kevtris.org/blogfiles/Atari%202600%20Mappers.txt
- */
-
-/*
-This works similar to 3F (Tigervision) above, except RAM has been added.  The range of
-addresses has been restricted, too.  Only 3E and 3F can be written to now.
-
-1000-17FF - this bank is selectable
-1800-1FFF - this bank is the last 2K of the ROM
-
-To select a particular 2K ROM bank, its number is poked into address 3F.  Because there's
-8 bits, there's enough for 256 2K banks, or a maximum of 512K of ROM.
-
-Writing to 3E, however, is what's new.  Writing here selects a 1K RAM bank into
-1000-17FF.  The example (Boulderdash) uses 16K of RAM, however there's theoretically
-enough space for 256K of RAM.  When RAM is selected, 1000-13FF is the read port while
-1400-17FF is the write port.
-*/
-void emulate_3E_cartridge()
-{
-	setup_cartridge_image_with_ram();
-
-	__disable_irq();	// Disable interrupts
-	int cartROMPages = cart_size_bytes/2048;
-	int cartRAMPages = 32;
-
-	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
-	unsigned char *bankPtr = &cart_rom[0];
-	unsigned char *fixedPtr = &cart_rom[(cartROMPages-1)*2048];
-	int bankIsRAM = 0;
-
-	while (1)
-	{
-		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
-		{	// new more robust test for stable address (seems to be needed for 7800)
-			addr_prev2 = addr_prev;
-			addr_prev = addr;
-		}
-		// got a stable address
-		if (addr & 0x1000)
-		{ // A12 high
-			if (bankIsRAM && (addr & 0xC00) == 0x400)
-			{	// we are accessing the RAM write addresses ($1400-$17FF)
-				// read last data on the bus before the address lines change
-				while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-				bankPtr[addr&0x3FF] = data_prev>>8;
-			}
-			else
-			{	// reads to either ROM or RAM
-				if (addr & 0x800)
-				{	// upper 2k ($1800-$1FFF)
-					data = fixedPtr[addr&0x7FF];	// upper 2k -> read fixed ROM bank
-				}
-				else
-				{	// lower 2k ($1000-$17FF)
-					if (!bankIsRAM)
-						data = bankPtr[addr&0x7FF];	// read switching ROM bank
-					else
-						data = bankPtr[addr&0x3FF];	// must be RAM read
-				}
-				DATA_OUT = data<<8;
-				SET_DATA_MODE_OUT
-				// wait for address bus to change
-				while (ADDR_IN == addr) ;
-				SET_DATA_MODE_IN
-			}
-		}
-		else
-		{	// A12 low, read last data on the bus before the address lines change
-			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-			data = data_prev>>8;
-			if (addr == 0x003F) {
-				bankIsRAM = 0;
-				bankPtr = &cart_rom[(data%cartROMPages)*2048];	// switch in ROM bank
-			}
-			else if (addr == 0x003E) {
-				bankIsRAM = 1;
-				bankPtr = &cart_ram[(data%cartRAMPages)*1024];	// switch in RAM bank
-			}
-		}
-	}
-	__enable_irq();
-}
-
 /* E0 Bankswitching
  * ------------------------------
  * The text below is the best description of the mapping scheme I could find,
@@ -1477,7 +1390,9 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_3F)
 		emulate_3f_cartridge(cartridge_image_path, cart_size_bytes, buffer);
 	else if (cart_type == CART_TYPE_3E)
-		emulate_3E_cartridge();
+		emulate_3e_cartridge(cartridge_image_path, cart_size_bytes, buffer, 32);
+	else if (cart_type == CART_TYPE_3EX)
+		emulate_3e_cartridge(cartridge_image_path, cart_size_bytes, buffer, BUFFER_SIZE);
 	else if (cart_type == CART_TYPE_E0)
 		emulate_E0_cartridge();
 	else if (cart_type == CART_TYPE_0840)

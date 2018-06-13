@@ -34,6 +34,7 @@ SOURCES = \
 	src/cartridge_firmware.c \
 	src/cartridge_supercharger.c \
 	src/cartridge_3f.c \
+	src/cartridge_3e.c \
 	src/flash.c \
 	src/main.c
 
