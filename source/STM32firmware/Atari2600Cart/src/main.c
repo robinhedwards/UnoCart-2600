@@ -38,6 +38,7 @@
 #include "cartridge_supercharger.h"
 #include "cartridge_3f.h"
 #include "cartridge_3e.h"
+#include "cartridge_ace.h"
 
 /*************************************************************************
  * Cartridge Definitions
@@ -75,6 +76,7 @@ int tv_mode;
 #define CART_TYPE_E7	20	// 16k+ram
 #define CART_TYPE_DPC	21	// 8k+DPC(2k)
 #define CART_TYPE_AR	22  // Arcadia Supercharger (variable size)
+#define CART_TYPE_ACE	23  // ARM Custom Executable
 
 typedef struct {
 	const char *ext;
@@ -107,6 +109,7 @@ EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
 	{"E7", CART_TYPE_E7},
 	{"DPC", CART_TYPE_DPC},
 	{"AR", CART_TYPE_AR},
+	{"ACE", CART_TYPE_ACE},
 	{0,0}
 };
 
@@ -417,7 +420,12 @@ int identify_cartridge(char *filename)
 
 	// If we don't already know the type (from the file extension), then we
 	// auto-detect the cart type - largely follows code in Stella's CartDetector.cpp
-	if (image_size == 2*1024)
+
+	if (is_ace_cartridge(bytes_read, buffer))
+	{
+		cart_type = CART_TYPE_ACE;
+	}
+	else if (image_size == 2*1024)
 	{
 		if (isProbablyCV(bytes_read, buffer))
 			cart_type = CART_TYPE_CV;
@@ -1414,6 +1422,13 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_AR) {
 		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer, tv_mode);
 	}
+	else if (cart_type == CART_TYPE_ACE)
+	{
+		if(launch_ace_cartridge(cartridge_image_path, BUFFER_SIZE * 1024, buffer))
+			set_menu_status_msg("GOOD ACE ROM");
+		else
+			set_menu_status_msg("BAD ACE FILE");
+	}
 }
 
 void convertFilenameForCart(unsigned char *dst, char *src)
@@ -1441,6 +1456,7 @@ int readDirectoryForAtari(char *path)
 	}
 	return ret;
 }
+
 int main(void)
 {
 	char curPath[256] = "";

@@ -90,19 +90,14 @@ static uint32_t lowest_available_flash_address() {
 }
 
 uint32_t available_flash() {
-	uint8_t last_reserved_sector = sector_id_for_address(lowest_available_flash_address() - 1);
-	uint8_t highest_available_sector = sector_id_for_address(highest_flash_address());
-
-	if (last_reserved_sector == 0xff || highest_available_sector == 0xff) return 0;
-
-	return sector_boundaries[highest_available_sector] - sector_boundaries[last_reserved_sector];
+	return flash_size_bytes() - (RESERVED_FLASH_KB * 1024);
 }
 
 bool prepare_flash(uint32_t size, flash_context* context) {
 	if (size > available_flash() || size == 0) return false;
 
-	const uint8_t first_sector_id = sector_id_for_address(highest_flash_address() - size + 1);
-	const uint8_t last_sector_id = sector_id_for_address(highest_flash_address());
+	const uint8_t first_sector_id = sector_id_for_address(lowest_available_flash_address());
+	const uint8_t last_sector_id = sector_id_for_address(lowest_available_flash_address() + size);
 
 	if (first_sector_id == 0xff || last_sector_id == 0xff) return false;
 	if (first_sector_id <= sector_id_for_address(lowest_available_flash_address() - 1)) return false;
@@ -116,7 +111,7 @@ bool prepare_flash(uint32_t size, flash_context* context) {
 
 	FLASH_Lock();
 
-	context->next_write_target = highest_flash_address() - size + 1;
+	context->next_write_target = lowest_available_flash_address();
 	context->base = (uint8_t*)(context->next_write_target);
 
 	return true;
