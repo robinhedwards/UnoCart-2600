@@ -1201,9 +1201,12 @@ void emulate_DPC_cartridge()
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0], *DpcDisplayPtr = &cart_rom[8*1024];
 
-	unsigned char DpcRandom, DpcTops[8], DpcBottoms[8], DpcFlags[8];
+	unsigned char DpcTops[8], DpcBottoms[8], DpcFlags[8];
 	uint16_t DpcCounters[8];
 	int DpcMusicModes[3], DpcMusicFlags[3];
+
+	// Initialise the DPC's random number generator register (must be non-zero)
+	int DpcRandom = 1;
 
 	// Initialise the DPC registers
 	for(int i = 0; i < 8; ++i)
@@ -1212,8 +1215,6 @@ void emulate_DPC_cartridge()
 	DpcMusicModes[0] = DpcMusicModes[1] = DpcMusicModes[2] = 0;
 	DpcMusicFlags[0] = DpcMusicFlags[1] = DpcMusicFlags[2] = 0;
 
-	// Initialise the DPC's random number generator register (must be non-zero)
-	DpcRandom = 1;
 
 	uint32_t lastSysTick = SysTick->VAL;
 	uint32_t DpcClocks = 0;
@@ -1245,8 +1246,9 @@ void emulate_DPC_cartridge()
 					{
 						if(index < 4)
 						{	// random number read
-							DpcRandom = (DpcRandom << 1) | (~(((DpcRandom >> 7) ^ (DpcRandom >> 5) ^ (DpcRandom >> 4) ^ (DpcRandom >> 3))) & 1);
-							result = DpcRandom;
+							DpcRandom ^= DpcRandom << 3;
+							DpcRandom ^= DpcRandom >> 5;
+							result = (unsigned char)DpcRandom;
 						}
 						else
 						{	// sound
