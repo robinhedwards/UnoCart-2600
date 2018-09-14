@@ -67,6 +67,7 @@ ACEFileHeader AceHeader __attribute__ ((section (".file_header"))) __attribute__
 */
 int main(void)
 {
+	__disable_irq(); // Good idea?
     flash_context ctx;
 
     if (!prepare_flash(&_binary_Debug_AtariCart_bin_size, &ctx))
