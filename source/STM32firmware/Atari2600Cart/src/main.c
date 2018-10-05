@@ -1196,6 +1196,7 @@ void emulate_DPC_cartridge()
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
 
+	unsigned char soundAmplitude = 0;
 	unsigned char soundAmplitudes[8] = {0x00, 0x04, 0x05, 0x09, 0x06, 0x0a, 0x0b, 0x0f};
 
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1252,15 +1253,7 @@ void emulate_DPC_cartridge()
 						}
 						else
 						{	// sound
-							unsigned char i = 0;
-							if (DpcMusicModes[0] && DpcMusicFlags[0])
-								i |= 0x01;
-							if (DpcMusicModes[1] && DpcMusicFlags[1])
-								i |= 0x02;
-							if (DpcMusicModes[2] && DpcMusicFlags[2])
-								i |= 0x04;
-
-							result = soundAmplitudes[i];
+							result = soundAmplitude;
 						}
 						break;
 					}
@@ -1362,9 +1355,20 @@ void emulate_DPC_cartridge()
 					DpcClocks++;
 					// update the music flags here, since there isn't enough time when the music register
 					// is being read.
-					DpcMusicFlags[0] = (DpcClocks % (DpcTops[5]+1)) > DpcBottoms[5];
-					DpcMusicFlags[1] = (DpcClocks % (DpcTops[6]+1)) > DpcBottoms[6];
-					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7]+1)) > DpcBottoms[7];
+					DpcMusicFlags[0] = (DpcClocks % (DpcTops[5] + 1))
+							> DpcBottoms[5] ? 1 : 0;
+					DpcMusicFlags[1] = (DpcClocks % (DpcTops[6] + 1))
+							> DpcBottoms[6] ? 2 : 0;
+					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7] + 1))
+							> DpcBottoms[7] ? 4 : 0;
+				}
+				else
+				{
+					// sound pre calculated here because it's too much to do when it's requested
+					unsigned char i = (DpcMusicModes[0] & DpcMusicFlags[0]); // test a does first one, test f does first one with e elsewhere
+					i |=  (DpcMusicModes[1] & DpcMusicFlags[1]); // test b does first two
+					i |=  (DpcMusicModes[2] & DpcMusicFlags[2]); // test d does all three
+					soundAmplitude = soundAmplitudes[i];
 				}
 				lastSysTick = sysTick;
 			}
