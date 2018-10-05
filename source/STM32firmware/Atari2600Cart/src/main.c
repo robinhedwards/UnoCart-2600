@@ -1486,7 +1486,7 @@ int main(void)
 	set_tv_mode(tv_mode);
 
 	// set up status area
-	set_menu_status_msg("BY R.EDWARDS");
+	set_menu_status_msg("R.EDWARDS  1");
 	set_menu_status_byte(0);
 
 	while (1) {
