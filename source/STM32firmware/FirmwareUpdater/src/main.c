@@ -32,6 +32,7 @@ SOFTWARE.
 
 #include "ace2600.h"
 #include "flash.h"
+#include "cartridge_io.h"
 
 /* Private macro */
 /* Private variables */
@@ -40,10 +41,12 @@ SOFTWARE.
 
 extern void Reset_Handler();
 
-extern void __file_size;
-extern void _binary_Debug_AtariCart_bin_end;
-extern void _binary_Debug_AtariCart_bin_size;
-extern void _binary_Debug_AtariCart_bin_start;
+extern int __file_size;
+extern uint8_t _binary_Debug_AtariCart_bin_end;
+extern int _binary_Debug_AtariCart_bin_size;
+extern uint8_t _binary_Debug_AtariCart_bin_start;
+
+extern uint8_t _binary_src_UpgradeComplete_bin_start;
 
 extern ACEFileHeader AceHeader;
 
@@ -52,7 +55,7 @@ ACEFileHeader AceHeader __attribute__ ((section (".file_header"))) __attribute__
 	.magic_number = "ACE-2600",
 	.driver_name = "Firmware Updater",
 	.driver_version = 1,
-	.rom_size = &__file_size,
+	.rom_size = (int)&__file_size,
 	.rom_checksum = 0,
 	.entry_point = (uint32_t)Reset_Handler
 };
@@ -70,15 +73,29 @@ int main(void)
 	__disable_irq(); // Good idea?
     flash_context ctx;
 
-    if (!prepare_flash(&_binary_Debug_AtariCart_bin_size, &ctx))
+    if (!prepare_flash((int)&_binary_Debug_AtariCart_bin_size, &ctx))
     	{
     		return false;
     	}
 
-    if (!write_flash(&_binary_Debug_AtariCart_bin_size, (uint8_t *)&_binary_Debug_AtariCart_bin_start, &ctx))
+    if (!write_flash((int)&_binary_Debug_AtariCart_bin_size, (uint8_t *)&_binary_Debug_AtariCart_bin_start, &ctx))
     {
     	return false;
     }
 
-    while(1);
+	uint16_t addr, addr_prev = 0;
+	while (1)
+	{
+		while ((addr = ADDR_IN) != addr_prev)
+			addr_prev = addr;
+		// got a stable address
+		if (addr & 0x1000)
+		{ // A12 high
+			DATA_OUT = ((uint16_t) (&_binary_src_UpgradeComplete_bin_start)[addr&0xFF]) << 8;
+			SET_DATA_MODE_OUT
+			// wait for address bus to change
+			while (ADDR_IN == addr) ;
+			SET_DATA_MODE_IN
+		}
+	}
 }

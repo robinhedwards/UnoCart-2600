@@ -26,6 +26,7 @@
 SHELL=cmd
 
 # System configuration
+LD = arm-atollic-eabi-ld
 CC = arm-atollic-eabi-gcc
 CXX = arm-atollic-eabi-g++
 OBJCOPY = arm-atollic-eabi-objcopy
@@ -35,8 +36,8 @@ RM=rm -rf
 LINKER_FLAGS=-lm -mthumb -mhard-float -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -Wl,--gc-sections -T$(LINK_SCRIPT) -static  -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group -specs=nano.specs -specs=nosys.specs  -Wl,-cref "-Wl,-Map=$(BIN_DIR)/FirmwareUpdater.map" -Wl,--defsym=malloc_getpagesize_P=0x1000
 LINK_SCRIPT="stm32f4_flash.ld"
 ASSEMBLER_FLAGS=-c -g -O0 -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mthumb -mhard-float -specs=nano.specs -D"STM32F4XX" -D"STM32F40XX" -D"USE_STDPERIPH_DRIVER"  -x assembler-with-cpp  -Isrc -ILibraries/CMSIS/Include -ILibraries/Device/STM32F4xx/Include -ILibraries/STM32F4xx_StdPeriph_Driver/inc
-COMPILER_FLAGS=-c -g -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -O0 -Wall -ffunction-sections -fdata-sections -mthumb -mhard-float -specs=nano.specs -D"STM32F4XX" -D"STM32F40XX" -D"USE_STDPERIPH_DRIVER"   -Isrc -ILibraries/CMSIS/Include -ILibraries/Device/STM32F4xx/Include -ILibraries/STM32F4xx_StdPeriph_Driver/inc
-CXXCOMPILER_FLAGS=-fno-threadsafe-statics -c -g -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -O0 -Wall -ffunction-sections -fdata-sections -mthumb -mhard-float -specs=nano.specs -fno-exceptions -fno-rtti -D"STM32F4XX" -D"STM32F40XX" -D"USE_STDPERIPH_DRIVER"   -Isrc -ILibraries/CMSIS/Include -ILibraries/Device/STM32F4xx/Include -ILibraries/STM32F4xx_StdPeriph_Driver/inc
+COMPILER_FLAGS=-c -g -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -Os -Wall -ffunction-sections -fdata-sections -mthumb -mhard-float -specs=nano.specs -D"STM32F4XX" -D"STM32F40XX" -D"USE_STDPERIPH_DRIVER"   -Isrc -ILibraries/CMSIS/Include -ILibraries/Device/STM32F4xx/Include -ILibraries/STM32F4xx_StdPeriph_Driver/inc
+CXXCOMPILER_FLAGS=-fno-threadsafe-statics -c -g -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -Os -Wall -ffunction-sections -fdata-sections -mthumb -mhard-float -specs=nano.specs -fno-exceptions -fno-rtti -D"STM32F4XX" -D"STM32F40XX" -D"USE_STDPERIPH_DRIVER"   -Isrc -ILibraries/CMSIS/Include -ILibraries/Device/STM32F4xx/Include -ILibraries/STM32F4xx_StdPeriph_Driver/inc
 
 # Define output directory
 OBJECT_DIR = Debug
@@ -81,8 +82,8 @@ all: $(BIN)
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $(ELF) $(BIN)
 
-$(ELF): $(OBJS) $(OBJECT_DIR)/src/AtariCart.o
-	$(CXX) -o "$(ELF)" $(OBJECT_DIR)/src/AtariCart.o $(OBJS) $(LINKER_FLAGS)
+$(ELF): $(OBJS) $(OBJECT_DIR)/src/AtariCart.o $(OBJECT_DIR)/src/UpgradeComplete.o
+	$(CXX) -o "$(ELF)" $(OBJECT_DIR)/src/AtariCart.o $(OBJECT_DIR)/src/UpgradeComplete.o $(OBJS) $(LINKER_FLAGS)
 
 clean:
 	$(RM) $(OBJS) "$(BIN_DIR)/FirmwareUpdater.elf" "$(BIN_DIR)/FirmwareUpdater.map"
@@ -96,6 +97,11 @@ $(OBJECT_DIR)/src/AtariCart.o: ../Atari2600Cart/Release/AtariCart.elf
 	$(OBJCOPY) -I binary -O elf32-littlearm -B arm $(BIN_DIR)/AtariCart.bin $(OBJECT_DIR)/src/AtariCart.o
 
 ../AtariCart/Release/AtariCart.elf:	
+
+$(OBJECT_DIR)/src/UpgradeComplete.o: src/UpgradeComplete.bin
+	$(LD) -r -b binary src/UpgradeComplete.bin -o $(OBJECT_DIR)/src/UpgradeComplete.o
+	
+UpgradeComplete.bin:
 
 ##################
 # Implicit targets
