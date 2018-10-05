@@ -9,6 +9,7 @@
 	org $ff00
 
 Reset:
+ cld		;Must be located at offset 0 in order to activate ROM from SD load screen in unocart
  lda #0
  ldx #$ff
 ClearLoop:
@@ -119,6 +120,8 @@ PF2b:
 ;  X ||  X X X ||    X X ||  X ||  X    X||  X 
 ;   X||X  X  X ||    X X ||  XX||X XXX  X||  XXX 
 
+	org $ffef
+	hex ff
 
 	org $fffc
 ;reset vector
