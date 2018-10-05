@@ -1319,7 +1319,7 @@ void emulate_DPC_cartridge()
 					{	// DFx counter high
 						DpcCounters[index] = (((uint16_t)(value & 0x07)) << 8) | (DpcCounters[index] & 0xff);
 						if(index >= 5)
-							DpcMusicModes[index - 5] = (value & 0x10);
+							DpcMusicModes[index - 5] = (value & 0x10) ? 0x7 : 0;
 						break;
 					}
 
@@ -1365,9 +1365,9 @@ void emulate_DPC_cartridge()
 				else
 				{
 					// sound pre calculated here because it's too much to do when it's requested
-					unsigned char i = (DpcMusicModes[0] & DpcMusicFlags[0]); // test a does first one, test f does first one with e elsewhere
-					i |=  (DpcMusicModes[1] & DpcMusicFlags[1]); // test b does first two
-					i |=  (DpcMusicModes[2] & DpcMusicFlags[2]); // test d does all three
+					unsigned char i = (DpcMusicModes[0] & DpcMusicFlags[0]);
+					i |=  (DpcMusicModes[1] & DpcMusicFlags[1]);
+					i |=  (DpcMusicModes[2] & DpcMusicFlags[2]);
 					soundAmplitude = soundAmplitudes[i];
 				}
 				lastSysTick = sysTick;
