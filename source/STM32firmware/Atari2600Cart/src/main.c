@@ -1196,7 +1196,8 @@ void emulate_DPC_cartridge()
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
 
-	unsigned char soundAmplitude = 0;
+	unsigned char prevRom = 0, prevRom2 = 0;
+	int soundAmplitudeIndex = 0;
 	unsigned char soundAmplitudes[8] = {0x00, 0x04, 0x05, 0x09, 0x06, 0x0a, 0x0b, 0x0f};
 
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
@@ -1253,7 +1254,10 @@ void emulate_DPC_cartridge()
 						}
 						else
 						{	// sound
-							result = soundAmplitude;
+							soundAmplitudeIndex = (DpcMusicModes[0] & DpcMusicFlags[0]);
+							soundAmplitudeIndex |=  (DpcMusicModes[1] & DpcMusicFlags[1]);
+							soundAmplitudeIndex |=  (DpcMusicModes[2] & DpcMusicFlags[2]);
+							result = soundAmplitudes[soundAmplitudeIndex];;
 						}
 						break;
 					}
@@ -1340,12 +1344,14 @@ void emulate_DPC_cartridge()
 				// normal rom access
 				DATA_OUT = ((uint16_t)bankPtr[addr&0xFFF])<<8;
 				SET_DATA_MODE_OUT
+				prevRom2 = prevRom;
+				prevRom = bankPtr[addr&0xFFF];
 				// wait for address bus to change
 				while (ADDR_IN == addr) ;
 				SET_DATA_MODE_IN
 			}
 		}
-		else
+		else if((prevRom2 & 0xec) == 0x84) // Only do this when ZP write since there will be a full cycle available there
 		{	// non cartridge access - e.g. sta wsync
 			while (ADDR_IN == addr) {
 				// should the DPC clock be incremented?
@@ -1361,14 +1367,6 @@ void emulate_DPC_cartridge()
 							> DpcBottoms[6] ? 2 : 0;
 					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7] + 1))
 							> DpcBottoms[7] ? 4 : 0;
-				}
-				else
-				{
-					// sound pre calculated here because it's too much to do when it's requested
-					unsigned char i = (DpcMusicModes[0] & DpcMusicFlags[0]);
-					i |=  (DpcMusicModes[1] & DpcMusicFlags[1]);
-					i |=  (DpcMusicModes[2] & DpcMusicFlags[2]);
-					soundAmplitude = soundAmplitudes[i];
 				}
 				lastSysTick = sysTick;
 			}
