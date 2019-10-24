@@ -52,7 +52,7 @@ However, there is a newer version - see below.
 New firmware
 ------------
 I haven't had any time to develop the firmware further, but DirtyHairy & ZackAttack on the AtariAge forums
-have added some great stuff to the firmware, including updating from SD card, support for Pink Panther protoype
+have added some great stuff to the firmware, including updating from SD card, support for Pink Panther prototype
 cartridge and much more to come.
 
 The releases of this new firmware can be found on [DirtyHairy's branch](https://github.com/DirtyHairy/UnoCart-2600/releases)
