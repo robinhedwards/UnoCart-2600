@@ -46,7 +46,19 @@ to test the design. The PCB design files are not currently public.
 
 Firmware
 --------
-The UnoCart-2600 firmware is open source under a GPL license and is hosted here.
+The UnoCart-2600 firmware is open source under a GPL license and my original firmware hosted here.
+However, there is a newer version - see below.
+
+New firmware
+------------
+I haven't had any time to develop the firmware further, but DirtyHairy & ZackAttack on the AtariAge forums
+have added some great stuff to the firmware, including updating from SD card, support for Pink Panther protoype
+cartridge and much more to come.
+
+The releases of this new firmware can be found on [DirtyHairy's branch](https://github.com/DirtyHairy/UnoCart-2600/releases)
+
+You'll need an ST-Link programmer the first time you update to this branch of the firmware. Subsequent updates can
+done simply from the SD card.
 
 Credits
 -------
