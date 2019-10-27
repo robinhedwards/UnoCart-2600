@@ -36,6 +36,9 @@
 #include "cartridge_io.h"
 #include "cartridge_firmware.h"
 #include "cartridge_supercharger.h"
+#include "cartridge_3f.h"
+#include "cartridge_3e.h"
+#include "cartridge_ace.h"
 
 /*************************************************************************
  * Cartridge Definitions
@@ -62,16 +65,18 @@ int tv_mode;
 #define CART_TYPE_FE	9	// 8k
 #define CART_TYPE_3F	10	// varies (examples 8k)
 #define CART_TYPE_3E	11	// varies (only example 32k)
-#define CART_TYPE_E0	12	// 8k
-#define CART_TYPE_0840	13	// 8k
-#define CART_TYPE_CV	14	// 2k+ram
-#define CART_TYPE_EF	15	// 64k
-#define CART_TYPE_EFSC	16	// 64k+ram
-#define CART_TYPE_F0	17	// 64k
-#define CART_TYPE_FA	18	// 12k
-#define CART_TYPE_E7	19	// 16k+ram
-#define CART_TYPE_DPC	20	// 8k+DPC(2k)
-#define CART_TYPE_AR	21  // Arcadia Supercharger (variable size)
+#define CART_TYPE_3EX   12
+#define CART_TYPE_E0	13	// 8k
+#define CART_TYPE_0840	14	// 8k
+#define CART_TYPE_CV	15	// 2k+ram
+#define CART_TYPE_EF	16	// 64k
+#define CART_TYPE_EFSC	17	// 64k+ram
+#define CART_TYPE_F0	18	// 64k
+#define CART_TYPE_FA	19	// 12k
+#define CART_TYPE_E7	20	// 16k+ram
+#define CART_TYPE_DPC	21	// 8k+DPC(2k)
+#define CART_TYPE_AR	22  // Arcadia Supercharger (variable size)
+#define CART_TYPE_ACE	23  // ARM Custom Executable
 
 typedef struct {
 	const char *ext;
@@ -93,6 +98,7 @@ EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
 	{"FE", CART_TYPE_FE},
 	{"3F", CART_TYPE_3F},
 	{"3E", CART_TYPE_3E},
+	{"3EX", CART_TYPE_3E},
 	{"E0", CART_TYPE_E0},
 	{"084", CART_TYPE_0840},
 	{"CV", CART_TYPE_CV},
@@ -103,6 +109,7 @@ EXT_TO_CART_TYPE_MAP ext_to_cart_type_map[] = {
 	{"E7", CART_TYPE_E7},
 	{"DPC", CART_TYPE_DPC},
 	{"AR", CART_TYPE_AR},
+	{"ACE", CART_TYPE_ACE},
 	{0,0}
 };
 
@@ -413,7 +420,12 @@ int identify_cartridge(char *filename)
 
 	// If we don't already know the type (from the file extension), then we
 	// auto-detect the cart type - largely follows code in Stella's CartDetector.cpp
-	if (image_size == 2*1024)
+
+	if (is_ace_cartridge(bytes_read, buffer))
+	{
+		cart_type = CART_TYPE_ACE;
+	}
+	else if (image_size == 2*1024)
 	{
 		if (isProbablyCV(bytes_read, buffer))
 			cart_type = CART_TYPE_CV;
@@ -824,71 +836,6 @@ void emulate_FE_cartridge()
 	__enable_irq();
 }
 
-/* 3F (Tigervision) Bankswitching
- * ------------------------------
- * Generally 8K ROMs, containing 4 x 2K banks. The last bank is always mapped into
- * the upper part of the 4K cartridge ROM space. The bank mapped into the lower part
- * of the 4K cartridge ROM space is selected by the lowest two bits written to $003F
- * (or any lower address).
- * In theory this scheme supports up to 512k ROMs if we use all the bits written to
- * $003F - the code below should support up to MAX_CART_ROM_SIZE.
- *
- * Note - Stella restricts bank switching to only *WRITES* to $0000-$003f. But we
- * can't do this here and Miner 2049'er crashes (unless we restrict to $003f only).
- *
- * From an post by Eckhard Stolberg, it seems the switch would happen on a real cart
- * only when the access is followed by an access to an address between $1000 and $1FFF.
- *
- * 29/3/18 - The emulation below switches on access to $003f only, since the my prior
- * attempt at the banking scheme described by Eckhard Stolberg didn't work on a 7800.
- *
- * Refs:
- * http://atariage.com/forums/topic/266245-tigervision-banking-and-low-memory-reads/
- * http://atariage.com/forums/topic/68544-3f-bankswitching/
- */
-void emulate_3F_cartridge()
-{
-	setup_cartridge_image();
-
-	__disable_irq();	// Disable interrupts
-	int cartPages = cart_size_bytes/2048;
-
-	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
-	unsigned char *bankPtr = &cart_rom[0];
-	unsigned char *fixedPtr = &cart_rom[(cartPages-1)*2048];
-
-	while (1)
-	{
-		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
-		{	// new more robust test for stable address (seems to be needed for 7800)
-			addr_prev2 = addr_prev;
-			addr_prev = addr;
-		}
-		// got a stable address
-		if (!(addr & 0x1000))
-		{	// A12 low, read last data on the bus before the address lines change
-			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-			if (addr == 0x003F)
-			{	// switch bank
-				int newPage = (data_prev>>8) % cartPages;
-				bankPtr = &cart_rom[newPage*2048];
-			}
-		}
-		else
-		{ // A12 high
-			if (addr & 0x800)
-				DATA_OUT = ((uint16_t)fixedPtr[addr&0x7FF])<<8;
-			else
-				DATA_OUT = ((uint16_t)bankPtr[addr&0x7FF])<<8;
-			SET_DATA_MODE_OUT
-			// wait for address bus to change
-			while (ADDR_IN == addr) ;
-			SET_DATA_MODE_IN
-		}
-	}
-	__enable_irq();
-}
-
 /* Scheme as described by Eckhard Stolberg. Didn't work on my test 7800, so replaced
  * by the simpler 3F only scheme above.
 	while (1)
@@ -920,96 +867,6 @@ void emulate_3F_cartridge()
 		}
 	}
  */
-
-/* 3E (3F + RAM) Bankswitching
- * ------------------------------
- * This scheme supports up to 512k ROM and 256K RAM.
- * However here we only support up to MAX_CART_ROM_SIZE and MAX_CART_RAM_SIZE
- *
- * The text below is the best description of the mapping scheme I could find,
- * quoted from http://blog.kevtris.org/blogfiles/Atari%202600%20Mappers.txt
- */
-
-/*
-This works similar to 3F (Tigervision) above, except RAM has been added.  The range of
-addresses has been restricted, too.  Only 3E and 3F can be written to now.
-
-1000-17FF - this bank is selectable
-1800-1FFF - this bank is the last 2K of the ROM
-
-To select a particular 2K ROM bank, its number is poked into address 3F.  Because there's
-8 bits, there's enough for 256 2K banks, or a maximum of 512K of ROM.
-
-Writing to 3E, however, is what's new.  Writing here selects a 1K RAM bank into
-1000-17FF.  The example (Boulderdash) uses 16K of RAM, however there's theoretically
-enough space for 256K of RAM.  When RAM is selected, 1000-13FF is the read port while
-1400-17FF is the write port.
-*/
-void emulate_3E_cartridge()
-{
-	setup_cartridge_image_with_ram();
-
-	__disable_irq();	// Disable interrupts
-	int cartROMPages = cart_size_bytes/2048;
-	int cartRAMPages = 32;
-
-	uint16_t addr, addr_prev = 0, addr_prev2 = 0, data = 0, data_prev = 0;
-	unsigned char *bankPtr = &cart_rom[0];
-	unsigned char *fixedPtr = &cart_rom[(cartROMPages-1)*2048];
-	int bankIsRAM = 0;
-
-	while (1)
-	{
-		while (((addr = ADDR_IN) != addr_prev) || (addr != addr_prev2))
-		{	// new more robust test for stable address (seems to be needed for 7800)
-			addr_prev2 = addr_prev;
-			addr_prev = addr;
-		}
-		// got a stable address
-		if (addr & 0x1000)
-		{ // A12 high
-			if (bankIsRAM && (addr & 0xC00) == 0x400)
-			{	// we are accessing the RAM write addresses ($1400-$17FF)
-				// read last data on the bus before the address lines change
-				while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-				bankPtr[addr&0x3FF] = data_prev>>8;
-			}
-			else
-			{	// reads to either ROM or RAM
-				if (addr & 0x800)
-				{	// upper 2k ($1800-$1FFF)
-					data = fixedPtr[addr&0x7FF];	// upper 2k -> read fixed ROM bank
-				}
-				else
-				{	// lower 2k ($1000-$17FF)
-					if (!bankIsRAM)
-						data = bankPtr[addr&0x7FF];	// read switching ROM bank
-					else
-						data = bankPtr[addr&0x3FF];	// must be RAM read
-				}
-				DATA_OUT = data<<8;
-				SET_DATA_MODE_OUT
-				// wait for address bus to change
-				while (ADDR_IN == addr) ;
-				SET_DATA_MODE_IN
-			}
-		}
-		else
-		{	// A12 low, read last data on the bus before the address lines change
-			while (ADDR_IN == addr) { data_prev = data; data = DATA_IN; }
-			data = data_prev>>8;
-			if (addr == 0x003F) {
-				bankIsRAM = 0;
-				bankPtr = &cart_rom[(data%cartROMPages)*2048];	// switch in ROM bank
-			}
-			else if (addr == 0x003E) {
-				bankIsRAM = 1;
-				bankPtr = &cart_ram[(data%cartRAMPages)*1024];	// switch in RAM bank
-			}
-		}
-	}
-	__enable_irq();
-}
 
 /* E0 Bankswitching
  * ------------------------------
@@ -1339,14 +1196,19 @@ void emulate_DPC_cartridge()
 	SysTick_Config(SystemCoreClock / 21000);	// 21KHz
 	__disable_irq();	// Disable interrupts
 
+	unsigned char prevRom = 0, prevRom2 = 0;
+	int soundAmplitudeIndex = 0;
 	unsigned char soundAmplitudes[8] = {0x00, 0x04, 0x05, 0x09, 0x06, 0x0a, 0x0b, 0x0f};
 
 	uint16_t addr, addr_prev = 0, data = 0, data_prev = 0;
 	unsigned char *bankPtr = &cart_rom[0], *DpcDisplayPtr = &cart_rom[8*1024];
 
-	unsigned char DpcRandom, DpcTops[8], DpcBottoms[8], DpcFlags[8];
+	unsigned char DpcTops[8], DpcBottoms[8], DpcFlags[8];
 	uint16_t DpcCounters[8];
 	int DpcMusicModes[3], DpcMusicFlags[3];
+
+	// Initialise the DPC's random number generator register (must be non-zero)
+	int DpcRandom = 1;
 
 	// Initialise the DPC registers
 	for(int i = 0; i < 8; ++i)
@@ -1355,8 +1217,6 @@ void emulate_DPC_cartridge()
 	DpcMusicModes[0] = DpcMusicModes[1] = DpcMusicModes[2] = 0;
 	DpcMusicFlags[0] = DpcMusicFlags[1] = DpcMusicFlags[2] = 0;
 
-	// Initialise the DPC's random number generator register (must be non-zero)
-	DpcRandom = 1;
 
 	uint32_t lastSysTick = SysTick->VAL;
 	uint32_t DpcClocks = 0;
@@ -1388,20 +1248,16 @@ void emulate_DPC_cartridge()
 					{
 						if(index < 4)
 						{	// random number read
-							DpcRandom = (DpcRandom << 1) | (~(((DpcRandom >> 7) ^ (DpcRandom >> 5) ^ (DpcRandom >> 4) ^ (DpcRandom >> 3))) & 1);
-							result = DpcRandom;
+							DpcRandom ^= DpcRandom << 3;
+							DpcRandom ^= DpcRandom >> 5;
+							result = (unsigned char)DpcRandom;
 						}
 						else
 						{	// sound
-							unsigned char i = 0;
-							if (DpcMusicModes[0] && DpcMusicFlags[0])
-								i |= 0x01;
-							if (DpcMusicModes[1] && DpcMusicFlags[1])
-								i |= 0x02;
-							if (DpcMusicModes[2] && DpcMusicFlags[2])
-								i |= 0x04;
-
-							result = soundAmplitudes[i];
+							soundAmplitudeIndex = (DpcMusicModes[0] & DpcMusicFlags[0]);
+							soundAmplitudeIndex |=  (DpcMusicModes[1] & DpcMusicFlags[1]);
+							soundAmplitudeIndex |=  (DpcMusicModes[2] & DpcMusicFlags[2]);
+							result = soundAmplitudes[soundAmplitudeIndex];;
 						}
 						break;
 					}
@@ -1467,7 +1323,7 @@ void emulate_DPC_cartridge()
 					{	// DFx counter high
 						DpcCounters[index] = (((uint16_t)(value & 0x07)) << 8) | (DpcCounters[index] & 0xff);
 						if(index >= 5)
-							DpcMusicModes[index - 5] = (value & 0x10);
+							DpcMusicModes[index - 5] = (value & 0x10) ? 0x7 : 0;
 						break;
 					}
 
@@ -1488,12 +1344,14 @@ void emulate_DPC_cartridge()
 				// normal rom access
 				DATA_OUT = ((uint16_t)bankPtr[addr&0xFFF])<<8;
 				SET_DATA_MODE_OUT
+				prevRom2 = prevRom;
+				prevRom = bankPtr[addr&0xFFF];
 				// wait for address bus to change
 				while (ADDR_IN == addr) ;
 				SET_DATA_MODE_IN
 			}
 		}
-		else
+		else if((prevRom2 & 0xec) == 0x84) // Only do this when ZP write since there will be a full cycle available there
 		{	// non cartridge access - e.g. sta wsync
 			while (ADDR_IN == addr) {
 				// should the DPC clock be incremented?
@@ -1503,9 +1361,12 @@ void emulate_DPC_cartridge()
 					DpcClocks++;
 					// update the music flags here, since there isn't enough time when the music register
 					// is being read.
-					DpcMusicFlags[0] = (DpcClocks % (DpcTops[5]+1)) > DpcBottoms[5];
-					DpcMusicFlags[1] = (DpcClocks % (DpcTops[6]+1)) > DpcBottoms[6];
-					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7]+1)) > DpcBottoms[7];
+					DpcMusicFlags[0] = (DpcClocks % (DpcTops[5] + 1))
+							> DpcBottoms[5] ? 1 : 0;
+					DpcMusicFlags[1] = (DpcClocks % (DpcTops[6] + 1))
+							> DpcBottoms[6] ? 2 : 0;
+					DpcMusicFlags[2] = (DpcClocks % (DpcTops[7] + 1))
+							> DpcBottoms[7] ? 4 : 0;
 				}
 				lastSysTick = sysTick;
 			}
@@ -1539,9 +1400,11 @@ void emulate_cartridge(int cart_type)
 	else if (cart_type == CART_TYPE_FE)
 		emulate_FE_cartridge();
 	else if (cart_type == CART_TYPE_3F)
-		emulate_3F_cartridge();
+		emulate_3f_cartridge(cartridge_image_path, cart_size_bytes, buffer);
 	else if (cart_type == CART_TYPE_3E)
-		emulate_3E_cartridge();
+		emulate_3e_cartridge(cartridge_image_path, cart_size_bytes, buffer, 32);
+	else if (cart_type == CART_TYPE_3EX)
+		emulate_3e_cartridge(cartridge_image_path, cart_size_bytes, buffer, BUFFER_SIZE);
 	else if (cart_type == CART_TYPE_E0)
 		emulate_E0_cartridge();
 	else if (cart_type == CART_TYPE_0840)
@@ -1562,6 +1425,13 @@ void emulate_cartridge(int cart_type)
 		emulate_DPC_cartridge();
 	else if (cart_type == CART_TYPE_AR) {
 		emulate_supercharger_cartridge(cartridge_image_path, cart_size_bytes, buffer, tv_mode);
+	}
+	else if (cart_type == CART_TYPE_ACE)
+	{
+		if(launch_ace_cartridge(cartridge_image_path, BUFFER_SIZE * 1024, buffer))
+			set_menu_status_msg("GOOD ACE ROM");
+		else
+			set_menu_status_msg("BAD ACE FILE");
 	}
 }
 
@@ -1590,6 +1460,7 @@ int readDirectoryForAtari(char *path)
 	}
 	return ret;
 }
+
 int main(void)
 {
 	char curPath[256] = "";
@@ -1613,10 +1484,8 @@ int main(void)
 	set_tv_mode(tv_mode);
 
 	// set up status area
-	set_menu_status_msg("BY R.EDWARDS");
+	set_menu_status_msg("R.EDWARDS  2");
 	set_menu_status_byte(0);
-
-
 
 	while (1) {
 		int ret = emulate_firmware_cartridge();

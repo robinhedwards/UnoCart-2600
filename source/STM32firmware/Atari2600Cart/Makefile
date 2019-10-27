@@ -22,6 +22,7 @@ SOURCES = \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c \
 	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c \
+	Libraries/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_flash.c \
 	Libraries/tm_stm32f4_spi/tm_stm32f4_spi.c \
 	Libraries/tm_stm32f4_gpio/tm_stm32f4_gpio.c \
 	Libraries/tm_stm32f4_fatfs/tm_stm32f4_fatfs.c \
@@ -32,6 +33,9 @@ SOURCES = \
 	Libraries/tm_stm32f4_fatfs/fatfs/ff.c \
 	src/cartridge_firmware.c \
 	src/cartridge_supercharger.c \
+	src/cartridge_3f.c \
+	src/cartridge_3e.c \
+	src/flash.c \
 	src/main.c
 
 INCLUDES = \
@@ -53,6 +57,7 @@ OBJECTS = $(addprefix $(BUILDDIR)/, $(addsuffix .o, $(basename $(SOURCES))))
 ELF = $(BUILDDIR)/firmware.elf
 HEX = $(BUILDDIR)/firmware.hex
 BIN = $(BUILDDIR)/firmware.bin
+MAP = $(BUILDDIR)/firmware.map
 
 CFLAGS = \
 	-MT $@ -MMD -MP -MF $(DEPDIR)/$*.d \
@@ -73,7 +78,8 @@ LDFLAGS += \
 	-T$(LDSCRIPT) \
 	-mthumb -mcpu=cortex-m4 \
 	--specs=nosys.specs \
-	-Wl,--gc-sections
+	-Wl,--gc-sections \
+	-Wl,-Map=$(MAP)
 
 bin: $(BIN)
 hex: $(HEX)
